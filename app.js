@@ -157,15 +157,22 @@ const CAT_ICONS = {
   Logement:'🏠', Telecom:'📱', Revenus:'💰', Autre:'📦',
 };
 
-function calcAccountBalance(accountName) {
-  // Solde initial du compte
+function calcAccountBalance(accountName, maxDate) {
   const acc = appData.accounts.find(a => a.name === accountName);
   const initial = acc ? (acc.initialBalance || 0) : 0;
+  let cutoff;
+  if (maxDate) {
+    cutoff = maxDate;
+  } else {
+    const now = new Date();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    cutoff = `${endOfMonth.getFullYear()}-${String(endOfMonth.getMonth()+1).padStart(2,'0')}-${String(endOfMonth.getDate()).padStart(2,'0')}`;
+  }
 
-  // Seulement les opérations réelles (pas les programmées futures)
   const ops = appData.operations.filter(op =>
     (!accountName || op.account === accountName) &&
-    op.opType !== 'Programmee'
+    op.opType !== 'Programmee' &&
+    op.date <= cutoff
   );
 
   return initial + ops.reduce((sum, op) =>
@@ -228,7 +235,11 @@ function getAccountNames() {
 // ── RENDU ────────────────────────────────────────────────────────────────────
 function calcTotalBalance() {
   const names = getAccountNames();
-  if (names.length > 0) return names.reduce((sum, n) => sum + calcAccountBalance(n), 0);
+  if (names.length > 0) {
+    return names
+      .filter(n => { const a = appData.accounts.find(x => x.name === n); return !a || a.includeInTotal !== false; })
+      .reduce((sum, n) => sum + calcAccountBalance(n), 0);
+  }
   return calcAccountBalance('');
 }
 
@@ -441,6 +452,7 @@ function renderAll() {
   populateAccountFilters();
   document.getElementById('display-email').textContent = localStorage.getItem('userEmail') || '—';
   updateSyncStatus();
+  populateTotalAccountsConfig();
   populateCardConfig();
 }
 
@@ -501,6 +513,76 @@ document.getElementById('form-expense').addEventListener('submit', async (e) => 
   if (accessToken) uploadToDrive().catch(err => toast('⚠️ ' + err.message));
 });
 
+// ── TOGGLE DÉPENSE / VIREMENT ────────────────────────────────────────────────
+document.getElementById('btn-mode-expense').addEventListener('click', () => {
+  document.getElementById('form-expense').classList.remove('hidden');
+  document.getElementById('form-transfer').classList.add('hidden');
+  document.getElementById('btn-mode-expense').style.background = 'var(--primary)';
+  document.getElementById('btn-mode-expense').style.color = 'white';
+  document.getElementById('btn-mode-transfer').style.background = 'var(--bg)';
+  document.getElementById('btn-mode-transfer').style.color = 'var(--text)';
+});
+
+document.getElementById('btn-mode-transfer').addEventListener('click', () => {
+  document.getElementById('form-expense').classList.add('hidden');
+  document.getElementById('form-transfer').classList.remove('hidden');
+  document.getElementById('btn-mode-transfer').style.background = 'var(--primary)';
+  document.getElementById('btn-mode-transfer').style.color = 'white';
+  document.getElementById('btn-mode-expense').style.background = 'var(--bg)';
+  document.getElementById('btn-mode-expense').style.color = 'var(--text)';
+  // Remplir les selects
+  const names = getAccountNames();
+  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  document.getElementById('trf-from').innerHTML = opts;
+  document.getElementById('trf-to').innerHTML = opts;
+  if (names.length > 1) document.getElementById('trf-to').selectedIndex = 1;
+  document.getElementById('trf-date').value = today();
+});
+
+// ── VIREMENT ────────────────────────────────────────────────────────────────
+document.getElementById('form-transfer').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const from   = document.getElementById('trf-from').value;
+  const to     = document.getElementById('trf-to').value;
+  const amount = parseInt(document.getElementById('trf-amount').value, 10);
+  const date   = document.getElementById('trf-date').value;
+  const label  = document.getElementById('trf-label').value.trim() || `[${to}]`;
+
+  if (from === to) { toast('⚠️ Les comptes source et destination doivent être différents'); return; }
+  if (!amount || amount <= 0) { toast('⚠️ Montant invalide'); return; }
+
+  // Débit sur le compte source
+  appData.operations.push({
+    id: uid(),
+    date,
+    label: `[${to}]`,
+    amount,
+    type: 'debit',
+    account: from,
+    category: 'Virement',
+    opType: 'Virement',
+  });
+
+  // Crédit sur le compte destination
+  appData.operations.push({
+    id: uid(),
+    date,
+    label: `[${from}]`,
+    amount,
+    type: 'credit',
+    account: to,
+    category: 'Virement',
+    opType: 'Virement',
+  });
+
+  saveLocal();
+  renderAll();
+  e.target.reset();
+  document.getElementById('trf-date').value = today();
+  toast(`✅ Virement de ${fmt(amount)} : ${from} → ${to}`);
+  if (accessToken) uploadToDrive().catch(err => toast('⚠️ ' + err.message));
+});
+
 // ── IMPORT ───────────────────────────────────────────────────────────────────
 document.getElementById('btn-import-bdu').addEventListener('click', async () => {
   const statusEl = document.getElementById('import-status');
@@ -532,6 +614,31 @@ document.getElementById('btn-sync').addEventListener('click', () => {
   if (!accessToken) { toast('Connectez-vous d\'abord'); return; }
   syncFromDrive();
 });
+
+// ── CONFIG COMPTES SOLDE TOTAL ───────────────────────────────────────────────
+function populateTotalAccountsConfig() {
+  const container = document.getElementById('cfg-total-accounts');
+  const names = getAccountNames();
+  container.innerHTML = names.map(name => {
+    const acc = appData.accounts.find(a => a.name === name);
+    const checked = !acc || acc.includeInTotal !== false ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;font-weight:400;color:var(--text);cursor:pointer">
+      <input type="checkbox" ${checked} data-account="${name}" class="cfg-total-cb" style="width:18px;height:18px;accent-color:var(--primary)"/>
+      ${name}
+    </label>`;
+  }).join('');
+
+  container.querySelectorAll('.cfg-total-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const accName = cb.dataset.account;
+      const acc = appData.accounts.find(a => a.name === accName);
+      if (acc) acc.includeInTotal = cb.checked;
+      saveLocal();
+      renderDashboard();
+      if (accessToken) uploadToDrive().catch(() => {});
+    });
+  });
+}
 
 // ── CONFIG CARTE DÉBIT DIFFÉRÉ ───────────────────────────────────────────────
 function populateCardConfig() {
@@ -676,6 +783,11 @@ function scheduledOpsInMonth(year, month, accountFilter) {
     const targetYear = year;
     const diffMonths = (targetYear - baseYear) * 12 + (targetMonth - baseMonth);
     if (diffMonths < 0) continue;
+    if (op.endDate) {
+      const endD = new Date(op.endDate + 'T00:00:00');
+      const lastMonth = new Date(targetYear, targetMonth, 1);
+      if (lastMonth > endD) continue;
+    }
     let applies = false;
     if (freq === 'ponctuelle') applies = diffMonths === 0;
     else if (freq === 'mensuelle') applies = diffMonths >= 0;
@@ -887,11 +999,12 @@ function renderScheduled() {
     const sign = op.type === 'credit' ? '+' : '-';
     const next = op.nextPayment ? formatDate(op.nextPayment) : '—';
     const freq = FREQ_LABELS[op.detail] || op.detail || '';
+    const endInfo = op.endDate ? ` · fin : ${formatDate(op.endDate)}` : '';
     return `<li>
       <span class="op-icon">🔁</span>
       <div class="op-info">
         <div class="op-label">${op.label}</div>
-        <div class="op-meta">${op.account} · ${freq} · prochain : ${next}</div>
+        <div class="op-meta">${op.account} · ${freq} · prochain : ${next}${endInfo}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
@@ -930,12 +1043,30 @@ document.getElementById('modal-passer-confirm').addEventListener('click', () => 
   const type    = document.getElementById('modal-passer-type').value;
   if (!dateStr || !amount) { toast('⚠️ Date et montant requis'); return; }
 
-  appData.operations.push({
-    id: uid(), date: dateStr, label: op.label,
-    amount, type,
-    account: op.account, category: op.category || 'Autre',
-    opType: 'Operation',
-  });
+  const isVirement = op.virementDest || (op.label && op.label.startsWith('['));
+  const dest = op.virementDest || (op.label.match(/^\[(.+)\]$/) || [])[1];
+
+  if (isVirement && dest) {
+    appData.operations.push({
+      id: uid(), date: dateStr, label: `[${dest}]`,
+      amount, type: 'debit',
+      account: op.account, category: 'Virement',
+      opType: 'Virement',
+    });
+    appData.operations.push({
+      id: uid(), date: dateStr, label: `[${op.account}]`,
+      amount, type: 'credit',
+      account: dest, category: 'Virement',
+      opType: 'Virement',
+    });
+  } else {
+    appData.operations.push({
+      id: uid(), date: dateStr, label: op.label,
+      amount, type,
+      account: op.account, category: op.category || 'Autre',
+      opType: 'Operation',
+    });
+  }
 
   // Avancer la prochaine échéance (montant de base inchangé)
   const freq = op.detail || 'mensuelle';
@@ -963,15 +1094,26 @@ window.editScheduled = function(id) {
   wrap.classList.remove('hidden');
   wrap.dataset.editId = id;
   wrap.querySelector('h3').textContent = 'Modifier l\'opération programmée';
-  const sel = document.getElementById('sch-account');
-  sel.innerHTML = getAccountNames().map(n => `<option value="${n}">${n}</option>`).join('');
+  const names = getAccountNames();
+  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  document.getElementById('sch-account').innerHTML = opts;
+  document.getElementById('sch-dest').innerHTML = opts;
   document.getElementById('sch-label').value = op.label;
   document.getElementById('sch-amount').value = op.amount;
-  document.getElementById('sch-type').value = op.type;
-  sel.value = op.account;
+  const isVirement = op.opType === 'Virement' || op.virementDest || (op.label && op.label.startsWith('['));
+  document.getElementById('sch-type').value = isVirement ? 'virement' : op.type;
+  document.getElementById('sch-account').value = op.account;
+  if (isVirement && op.virementDest) {
+    document.getElementById('sch-dest').value = op.virementDest;
+  } else if (isVirement && op.label) {
+    const destMatch = op.label.match(/^\[(.+)\]$/);
+    if (destMatch) document.getElementById('sch-dest').value = destMatch[1];
+  }
   document.getElementById('sch-category').value = op.category || 'Autre';
   document.getElementById('sch-freq').value = op.detail || 'mensuelle';
   document.getElementById('sch-next').value = op.nextPayment || op.date;
+  document.getElementById('sch-end').value = op.endDate || '';
+  toggleSchDest();
   wrap.scrollIntoView({ behavior: 'smooth' });
 };
 
@@ -986,10 +1128,19 @@ window.deleteScheduled = function(id) {
 document.getElementById('btn-add-scheduled').addEventListener('click', () => {
   document.getElementById('form-scheduled-wrap').classList.remove('hidden');
   document.getElementById('sch-next').value = today();
-  // Populate account select
-  const sel = document.getElementById('sch-account');
-  sel.innerHTML = getAccountNames().map(n => `<option value="${n}">${n}</option>`).join('');
+  const names = getAccountNames();
+  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  document.getElementById('sch-account').innerHTML = opts;
+  document.getElementById('sch-dest').innerHTML = opts;
+  if (names.length > 1) document.getElementById('sch-dest').selectedIndex = 1;
+  toggleSchDest();
 });
+
+function toggleSchDest() {
+  const isVirement = document.getElementById('sch-type').value === 'virement';
+  document.getElementById('sch-dest-wrap').classList.toggle('hidden', !isVirement);
+}
+document.getElementById('sch-type').addEventListener('change', toggleSchDest);
 
 function closeScheduledForm() {
   const wrap = document.getElementById('form-scheduled-wrap');
@@ -1005,24 +1156,57 @@ document.getElementById('form-scheduled').addEventListener('submit', async (e) =
   e.preventDefault();
   const wrap = document.getElementById('form-scheduled-wrap');
   const editId = wrap.dataset.editId;
-  const fields = {
-    date: document.getElementById('sch-next').value,
-    nextPayment: document.getElementById('sch-next').value,
-    label: document.getElementById('sch-label').value.trim(),
-    amount: parseInt(document.getElementById('sch-amount').value, 10),
-    type: document.getElementById('sch-type').value,
-    account: document.getElementById('sch-account').value,
-    category: document.getElementById('sch-category').value,
-    detail: document.getElementById('sch-freq').value,
-    opType: 'Programmee',
-  };
-  if (editId) {
-    const idx = appData.operations.findIndex(o => o.id === editId);
-    if (idx !== -1) appData.operations[idx] = { ...appData.operations[idx], ...fields };
-    toast('✅ Opération modifiée');
+  const typeVal = document.getElementById('sch-type').value;
+  const account = document.getElementById('sch-account').value;
+  const dest = document.getElementById('sch-dest').value;
+  const amount = parseInt(document.getElementById('sch-amount').value, 10);
+  const nextDate = document.getElementById('sch-next').value;
+
+  const endDate = document.getElementById('sch-end').value || null;
+
+  if (typeVal === 'virement') {
+    if (account === dest) { toast('⚠️ Source et destination identiques'); return; }
+    const baseFields = {
+      date: nextDate,
+      nextPayment: nextDate,
+      amount,
+      category: 'Virement',
+      detail: document.getElementById('sch-freq').value,
+      opType: 'Programmee',
+      endDate,
+    };
+    if (editId) {
+      const idx = appData.operations.findIndex(o => o.id === editId);
+      if (idx !== -1) {
+        appData.operations[idx] = { ...appData.operations[idx], ...baseFields, label: `[${dest}]`, type: 'debit', account, virementDest: dest };
+      }
+      toast('✅ Virement programmé modifié');
+    } else {
+      // Créer le débit programmé (source)
+      appData.operations.push({ id: uid(), ...baseFields, label: `[${dest}]`, type: 'debit', account, virementDest: dest });
+      toast('✅ Virement programmé enregistré');
+    }
   } else {
-    appData.operations.push({ id: uid(), ...fields });
-    toast('✅ Opération programmée enregistrée');
+    const fields = {
+      date: nextDate,
+      nextPayment: nextDate,
+      label: document.getElementById('sch-label').value.trim(),
+      amount,
+      type: typeVal,
+      account,
+      category: document.getElementById('sch-category').value,
+      detail: document.getElementById('sch-freq').value,
+      opType: 'Programmee',
+      endDate,
+    };
+    if (editId) {
+      const idx = appData.operations.findIndex(o => o.id === editId);
+      if (idx !== -1) appData.operations[idx] = { ...appData.operations[idx], ...fields };
+      toast('✅ Opération modifiée');
+    } else {
+      appData.operations.push({ id: uid(), ...fields });
+      toast('✅ Opération programmée enregistrée');
+    }
   }
   saveLocal();
   renderScheduled();
@@ -1037,16 +1221,25 @@ window.editOp = function(id) {
   const op = appData.operations.find(o => o.id === id);
   if (!op) return;
   _editOpId = id;
-  const sel = document.getElementById('edit-op-account');
-  sel.innerHTML = getAccountNames().map(n => `<option value="${n}">${n}</option>`).join('');
+  const names = getAccountNames();
+  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  document.getElementById('edit-op-account').innerHTML = opts;
+  document.getElementById('edit-op-dest').innerHTML = opts;
   document.getElementById('edit-op-date').value     = op.date;
   document.getElementById('edit-op-label').value    = op.label;
   document.getElementById('edit-op-amount').value   = op.amount;
-  document.getElementById('edit-op-type').value     = op.type;
-  sel.value = op.account;
+  document.getElementById('edit-op-type').value     = op.opType === 'Virement' ? 'virement' : op.type;
+  document.getElementById('edit-op-account').value  = op.account;
   document.getElementById('edit-op-category').value = op.category || 'Autre';
+  toggleEditDest();
   document.getElementById('modal-edit-op').classList.remove('hidden');
 };
+
+function toggleEditDest() {
+  const isVirement = document.getElementById('edit-op-type').value === 'virement';
+  document.getElementById('edit-op-dest-wrap').classList.toggle('hidden', !isVirement);
+}
+document.getElementById('edit-op-type').addEventListener('change', toggleEditDest);
 
 document.getElementById('edit-op-cancel').addEventListener('click', () => {
   document.getElementById('modal-edit-op').classList.add('hidden');
@@ -1056,17 +1249,52 @@ document.getElementById('edit-op-cancel').addEventListener('click', () => {
 document.getElementById('edit-op-confirm').addEventListener('click', () => {
   const op = appData.operations.find(o => o.id === _editOpId);
   if (!op) return;
-  op.date     = document.getElementById('edit-op-date').value;
-  op.label    = document.getElementById('edit-op-label').value.trim();
-  op.amount   = parseInt(document.getElementById('edit-op-amount').value, 10);
-  op.type     = document.getElementById('edit-op-type').value;
-  op.account  = document.getElementById('edit-op-account').value;
-  op.category = document.getElementById('edit-op-category').value;
+  const typeVal = document.getElementById('edit-op-type').value;
+  const date    = document.getElementById('edit-op-date').value;
+  const label   = document.getElementById('edit-op-label').value.trim();
+  const amount  = parseInt(document.getElementById('edit-op-amount').value, 10);
+  const account = document.getElementById('edit-op-account').value;
+  const category = document.getElementById('edit-op-category').value;
+
+  if (typeVal === 'virement') {
+    const dest = document.getElementById('edit-op-dest').value;
+    if (account === dest) { toast('⚠️ Source et destination identiques'); return; }
+
+    // Transformer l'opération existante en débit (source)
+    op.date = date;
+    op.label = `[${dest}]`;
+    op.amount = amount;
+    op.type = 'debit';
+    op.account = account;
+    op.category = 'Virement';
+    op.opType = 'Virement';
+
+    // Créer l'opération crédit (destination)
+    appData.operations.push({
+      id: uid(),
+      date,
+      label: `[${account}]`,
+      amount,
+      type: 'credit',
+      account: dest,
+      category: 'Virement',
+      opType: 'Virement',
+    });
+    toast(`✅ Converti en virement : ${account} → ${dest}`);
+  } else {
+    op.date     = date;
+    op.label    = label;
+    op.amount   = amount;
+    op.type     = typeVal;
+    op.account  = account;
+    op.category = category;
+    toast('✅ Opération modifiée');
+  }
+
   saveLocal();
   renderAll();
   document.getElementById('modal-edit-op').classList.add('hidden');
   _editOpId = null;
-  toast('✅ Opération modifiée');
   if (accessToken) uploadToDrive().catch(() => {});
 });
 

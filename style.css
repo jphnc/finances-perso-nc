@@ -249,17 +249,20 @@ input:focus, select:focus { border-color: var(--primary-light); background: whit
 .modal {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.5);
-  display: flex; align-items: flex-end; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   z-index: 200;
   padding: 16px;
+  overflow-y: auto;
 }
 .modal.hidden { display: none; }
 .modal-content {
   background: white;
-  border-radius: 20px 20px 16px 16px;
+  border-radius: 16px;
   padding: 24px;
   width: 100%;
   max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;

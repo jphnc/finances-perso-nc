@@ -177,6 +177,37 @@
       <h2>Saisie rapide</h2>
     </header>
 
+    <!-- Toggle Dépense / Virement -->
+    <div style="display:flex;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:1.5px solid var(--border)">
+      <button type="button" id="btn-mode-expense" class="mode-toggle active" style="flex:1;padding:10px;border:none;font-size:0.9rem;font-weight:700;cursor:pointer;background:var(--primary);color:white">💳 Dépense / Revenu</button>
+      <button type="button" id="btn-mode-transfer" class="mode-toggle" style="flex:1;padding:10px;border:none;font-size:0.9rem;font-weight:700;cursor:pointer;background:var(--bg);color:var(--text)">🔄 Virement</button>
+    </div>
+
+    <!-- Formulaire Virement -->
+    <form id="form-transfer" class="card-form hidden">
+      <label>
+        Date
+        <input type="date" id="trf-date" required/>
+      </label>
+      <label>
+        Compte source (débit)
+        <select id="trf-from"></select>
+      </label>
+      <label>
+        Compte destination (crédit)
+        <select id="trf-to"></select>
+      </label>
+      <label>
+        Montant (F CFP)
+        <input type="number" id="trf-amount" placeholder="0" min="1" required inputmode="numeric"/>
+      </label>
+      <label>
+        Libellé (optionnel)
+        <input type="text" id="trf-label" placeholder="Ex: Épargne mensuelle" autocomplete="off"/>
+      </label>
+      <button type="submit" class="btn-primary">🔄 Effectuer le virement</button>
+    </form>
+
     <form id="form-expense" class="card-form">
       <label>
         Date
@@ -238,6 +269,9 @@
         <span id="display-lastsync" class="muted">—</span>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Comptes inclus dans le solde total</p>
+      <div id="cfg-total-accounts" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">💳 Carte à débit différé</p>
       <label>Compte carte
         <select id="cfg-card-account" style="margin-bottom:4px"></select>
@@ -282,10 +316,15 @@
           <select id="sch-type">
             <option value="debit">Débit (dépense)</option>
             <option value="credit">Crédit (revenu)</option>
+            <option value="virement">Virement (transfert)</option>
           </select>
         </label>
         <label>Compte
           <select id="sch-account"></select>
+        </label>
+        <label id="sch-dest-wrap" class="hidden">
+          Compte destination
+          <select id="sch-dest"></select>
         </label>
         <label>Catégorie
           <select id="sch-category">
@@ -310,6 +349,9 @@
         </label>
         <label>Prochaine échéance
           <input type="date" id="sch-next" required/>
+        </label>
+        <label>Date de fin (optionnel)
+          <input type="date" id="sch-end"/>
         </label>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button type="submit" class="btn-primary" style="flex:1">✅ Enregistrer</button>
@@ -343,10 +385,15 @@
       <select id="edit-op-type">
         <option value="debit">Débit (dépense)</option>
         <option value="credit">Crédit (revenu)</option>
+        <option value="virement">Virement (transfert)</option>
       </select>
     </label>
     <label>Compte
       <select id="edit-op-account"></select>
+    </label>
+    <label id="edit-op-dest-wrap" class="hidden">
+      Compte destination
+      <select id="edit-op-dest"></select>
     </label>
     <label>Catégorie
       <select id="edit-op-category">
