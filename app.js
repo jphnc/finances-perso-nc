@@ -70,19 +70,31 @@ function onTokenReceived(resp) {
 }
 document.getElementById('btn-login').addEventListener('click', () => {
   if (!tokenClient) { toast('Google API pas encore chargée, patientez…'); return; }
-  tokenClient.requestAccessToken({ prompt: 'consent' });
+  tokenClient.requestAccessToken({ prompt: '' });
+});
+document.getElementById('btn-skip-login').addEventListener('click', () => {
+  showScreen('screen-main');
+  if (loadLocal()) renderAll();
 });
 window.addEventListener('load', () => {
+  const hasData = loadLocal();
+  if (hasData) {
+    renderAll();
+    showScreen('screen-main');
+  }
+  setDefaultDate();
+
   const waitGoogle = setInterval(() => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
       initGoogleAuth();
       const saved = localStorage.getItem('gToken');
-      if (saved) tokenClient.requestAccessToken({ prompt: '' });
+      if (saved) {
+        // Sync silencieuse en arrière-plan
+        tokenClient.requestAccessToken({ prompt: '' });
+      }
     }
   }, 200);
-  if (loadLocal()) renderAll();
-  setDefaultDate();
 });
 
 // ── GOOGLE DRIVE ─────────────────────────────────────────────────────────────
