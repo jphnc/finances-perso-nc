@@ -553,49 +553,13 @@ function renderOperations() {
   if (search)     ops = ops.filter(op => op.label.toLowerCase().includes(search));
 
   if (useMonthView) {
-    const monthStart = `${opsYear}-${String(opsMonth+1).padStart(2,'0')}-01`;
-    const monthEnd   = `${opsYear}-${String(opsMonth+1).padStart(2,'0')}-31`;
-    const acc = appData.accounts.find(a => a.name === accFilter);
-    const initial = acc ? (acc.initialBalance || 0) : 0;
+    // Solde de début de mois = solde fin du mois précédent
+    const prevMonth = opsMonth === 0 ? 11 : opsMonth - 1;
+    const prevYear = opsMonth === 0 ? opsYear - 1 : opsYear;
+    const balanceStart = calcBalanceEndOfMonth(accFilter, prevYear, prevMonth);
 
-    // Solde de début de mois : toutes les opérations réelles avant ce mois
-    const beforeOps = ops.filter(op => op.date < monthStart && op.opType !== 'Programmee');
-    let balanceStart = initial + beforeOps.reduce((s, op) =>
-      op.type === 'credit' ? s + op.amount : s - op.amount, 0);
-
-    const now = new Date();
-    const currentMonth = now.getFullYear() * 12 + now.getMonth();
-    const viewMonth = opsYear * 12 + opsMonth;
-    const isFuture = viewMonth > currentMonth;
-
-    // Pour les mois futurs, ajouter les opérations programmées des mois intermédiaires
-    if (isFuture) {
-      for (let m = currentMonth + 1; m < viewMonth; m++) {
-        const y = Math.floor(m / 12);
-        const mo = m % 12;
-        const schOps = scheduledOpsInMonth(y, mo, accFilter);
-        balanceStart += schOps.reduce((s, op) =>
-          op.type === 'credit' ? s + op.amount : s - op.amount, 0);
-      }
-      // Ajouter aussi les opérations réelles futures avant ce mois
-      const futureRealOps = ops.filter(op =>
-        op.date >= monthStart && op.date <= monthEnd && op.opType !== 'Programmee');
-      // Pas besoin ici — on les affiche dans le mois
-    }
-
-    let monthOps;
-    if (isFuture) {
-      const scheduled = scheduledOpsInMonth(opsYear, opsMonth, accFilter);
-      // Ajouter les opérations réelles futures dans ce mois
-      const realFuture = ops.filter(op => op.date >= monthStart && op.date <= monthEnd && op.opType !== 'Programmee');
-      const all = [
-        ...realFuture,
-        ...scheduled.map(op => ({ ...op, opType: 'Programmee' })),
-      ].sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
-      monthOps = all;
-    } else {
-      monthOps = ops.filter(op => op.date >= monthStart && op.date <= monthEnd && op.opType !== 'Programmee');
-    }
+    // Opérations du mois (réelles + programmées si futur)
+    const monthOps = getMonthOps(accFilter, opsYear, opsMonth);
 
     // Afficher solde début de mois
     const fmtN = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
@@ -1301,34 +1265,63 @@ function scheduledOpsInMonth(year, month, accountFilter) {
   return result;
 }
 
-function calcProjection(accountFilter, horizonMonths) {
-  // Solde de départ = solde au 1er du mois prochain (exclut les ops futures non encore passées)
+// Calcul du solde à la fin d'un mois donné (ops réelles + programmées pour les mois futurs)
+function calcBalanceEndOfMonth(accountFilter, year, month) {
+  const mEnd = `${year}-${String(month+1).padStart(2,'0')}-31`;
   const now = new Date();
-  const firstMonthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  const nextMonthStart  = addMonths(firstMonthStart, 1);
+  const currentMonth = now.getFullYear() * 12 + now.getMonth();
+  const targetMonth = year * 12 + month;
 
-  const allOps = appData.operations.filter(op =>
-    (!accountFilter || op.account === accountFilter) &&
-    op.opType !== 'Programmee'
-  );
-
-  const startOps = allOps.filter(op => op.date < nextMonthStart);
-  const acc = accountFilter ? appData.accounts.find(a => a.name === accountFilter) : null;
-
-  let startBalance;
   if (accountFilter) {
+    const acc = appData.accounts.find(a => a.name === accountFilter);
     const initial = acc ? (acc.initialBalance || 0) : 0;
-    startBalance = initial + startOps.reduce((s, op) =>
+    const realOps = appData.operations.filter(op =>
+      op.account === accountFilter && op.opType !== 'Programmee' && op.date <= mEnd);
+    let bal = initial + realOps.reduce((s, op) =>
       op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+    // Ajouter les ops programmées pour chaque mois futur jusqu'au mois cible
+    for (let m = currentMonth + 1; m <= targetMonth; m++) {
+      const schOps = scheduledOpsInMonth(Math.floor(m/12), m%12, accountFilter);
+      bal += schOps.reduce((s, op) => op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+    }
+    return bal;
   } else {
-    // Tous les comptes
-    startBalance = appData.accounts.reduce((total, a) => {
-      const initial = a.initialBalance || 0;
-      const ops2 = allOps.filter(op => op.account === a.name && op.date < nextMonthStart);
-      return total + initial + ops2.reduce((s, op) =>
-        op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+    return appData.accounts.reduce((total, a) => {
+      return total + calcBalanceEndOfMonth(a.name, year, month);
     }, 0);
   }
+}
+
+// Opérations d'un mois donné (réelles + programmées si futur)
+function getMonthOps(accountFilter, year, month) {
+  const mStart = `${year}-${String(month+1).padStart(2,'0')}-01`;
+  const mEnd = `${year}-${String(month+1).padStart(2,'0')}-31`;
+  const now = new Date();
+  const currentMonth = now.getFullYear() * 12 + now.getMonth();
+  const targetMonth = year * 12 + month;
+  const isFuture = targetMonth > currentMonth;
+
+  const realOps = appData.operations.filter(op =>
+    (!accountFilter || op.account === accountFilter) &&
+    op.opType !== 'Programmee' &&
+    op.date >= mStart && op.date <= mEnd
+  );
+
+  if (isFuture) {
+    const scheduled = scheduledOpsInMonth(year, month, accountFilter);
+    return [
+      ...realOps,
+      ...scheduled.map(op => ({ ...op, opType: 'Programmee' })),
+    ].sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
+  }
+  return realOps.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function calcProjection(accountFilter, horizonMonths) {
+  const now = new Date();
+
+  // Solde de départ = solde fin du mois courant
+  const startBalance = calcBalanceEndOfMonth(accountFilter, now.getFullYear(), now.getMonth());
 
   const points  = [];
   const opLines = [];
@@ -1336,20 +1329,9 @@ function calcProjection(accountFilter, horizonMonths) {
 
   for (let i = 1; i <= horizonMonths; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const mStart = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-    const mEnd   = addMonths(mStart, 1).slice(0,-2) + '31';
+    const y = d.getFullYear(), m = d.getMonth();
 
-    // Opérations programmées du mois
-    const scheduled = scheduledOpsInMonth(d.getFullYear(), d.getMonth(), accountFilter);
-
-    // Opérations régulières futures dans ce mois (virements, etc.)
-    const regular = allOps.filter(op => op.date >= mStart && op.date <= mEnd);
-
-    // Fusionner et trier par date
-    const monthOps = [
-      ...regular.map(op => ({ ...op, _src: 'regular' })),
-      ...scheduled.map(op => ({ ...op, _src: 'scheduled', opType: 'Programmee' })),
-    ].sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
+    const monthOps = getMonthOps(accountFilter, y, m);
 
     let monthDelta = 0;
     for (const op of monthOps) {
