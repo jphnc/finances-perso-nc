@@ -1,5 +1,5 @@
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
 }
 
 const CLIENT_ID = '619213518527-fnhgngfn15alhkhnpiq8mnock1jpqbfa.apps.googleusercontent.com';
@@ -553,25 +553,46 @@ function renderOperations() {
   if (search)     ops = ops.filter(op => op.label.toLowerCase().includes(search));
 
   if (useMonthView) {
-    // Solde en début de mois
     const monthStart = `${opsYear}-${String(opsMonth+1).padStart(2,'0')}-01`;
     const monthEnd   = `${opsYear}-${String(opsMonth+1).padStart(2,'0')}-31`;
     const acc = appData.accounts.find(a => a.name === accFilter);
     const initial = acc ? (acc.initialBalance || 0) : 0;
+
+    // Solde de début de mois : toutes les opérations réelles avant ce mois
     const beforeOps = ops.filter(op => op.date < monthStart && op.opType !== 'Programmee');
-    const balanceStart = initial + beforeOps.reduce((s, op) =>
+    let balanceStart = initial + beforeOps.reduce((s, op) =>
       op.type === 'credit' ? s + op.amount : s - op.amount, 0);
 
     const now = new Date();
-    const isFuture = opsYear > now.getFullYear() ||
-      (opsYear === now.getFullYear() && opsMonth > now.getMonth());
+    const currentMonth = now.getFullYear() * 12 + now.getMonth();
+    const viewMonth = opsYear * 12 + opsMonth;
+    const isFuture = viewMonth > currentMonth;
+
+    // Pour les mois futurs, ajouter les opérations programmées des mois intermédiaires
+    if (isFuture) {
+      for (let m = currentMonth + 1; m < viewMonth; m++) {
+        const y = Math.floor(m / 12);
+        const mo = m % 12;
+        const schOps = scheduledOpsInMonth(y, mo, accFilter);
+        balanceStart += schOps.reduce((s, op) =>
+          op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+      }
+      // Ajouter aussi les opérations réelles futures avant ce mois
+      const futureRealOps = ops.filter(op =>
+        op.date >= monthStart && op.date <= monthEnd && op.opType !== 'Programmee');
+      // Pas besoin ici — on les affiche dans le mois
+    }
 
     let monthOps;
     if (isFuture) {
-      // Opérations programmées du mois
       const scheduled = scheduledOpsInMonth(opsYear, opsMonth, accFilter);
-      scheduled.sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
-      monthOps = scheduled.map(op => ({ ...op, opType: 'Programmee' }));
+      // Ajouter les opérations réelles futures dans ce mois
+      const realFuture = ops.filter(op => op.date >= monthStart && op.date <= monthEnd && op.opType !== 'Programmee');
+      const all = [
+        ...realFuture,
+        ...scheduled.map(op => ({ ...op, opType: 'Programmee' })),
+      ].sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
+      monthOps = all;
     } else {
       monthOps = ops.filter(op => op.date >= monthStart && op.date <= monthEnd && op.opType !== 'Programmee');
     }
