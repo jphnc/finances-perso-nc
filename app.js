@@ -228,7 +228,9 @@ async function uploadToDrive() {
     headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
     body: JSON.stringify(appData, null, 2),
   });
-  appData.lastSync = new Date().toISOString();
+  const now = new Date();
+  appData.lastSync = now.toISOString();
+  appData.lastSyncLocal = now.toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
   saveLocal();
   updateSyncStatus();
 }
@@ -268,8 +270,7 @@ function updateSyncStatus() {
   const el = document.getElementById('sync-status');
   const ls = document.getElementById('display-lastsync');
   if (appData.lastSync) {
-    const d = new Date(appData.lastSync);
-    const str = d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const str = appData.lastSyncLocal || new Date(appData.lastSync).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
     el.textContent = '✅ Sync ' + str;
     if (ls) ls.textContent = str;
   }
