@@ -1468,6 +1468,52 @@ function renderProjection() {
   </svg>`;
   document.getElementById('proj-chart').innerHTML = svg;
 
+  // Tableau récapitulatif par compte (si "Tous les comptes")
+  let accountSummaryHtml = '';
+  if (!accountFilter) {
+    const fmtS = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
+    const names = getAccountNames();
+    const months = endBalances.slice(1); // exclure "actuel"
+
+    const headerCols = months.map(e => `<th style="padding:4px 6px;text-align:right;font-size:0.7rem;color:var(--muted);white-space:nowrap">${e.label}</th>`).join('');
+    const accRows = names.map(name => {
+      const acc = appData.accounts.find(a => a.name === name);
+      if (acc && acc.includeInTotal === false) return '';
+      const cells = months.map((e, i) => {
+        const d = new Date(now2.getFullYear(), now2.getMonth() + i + 1, 1);
+        const bal = calcBalanceAtDate(name, d.getFullYear(), d.getMonth(), cutDay);
+        const col = bal >= 0 ? 'var(--accent)' : 'var(--danger)';
+        return `<td style="padding:4px 6px;text-align:right;font-size:0.78rem;font-weight:600;color:${col};white-space:nowrap">${fmtS(bal)}</td>`;
+      }).join('');
+      return `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:4px 6px;font-size:0.8rem;font-weight:600;white-space:nowrap">${name}</td>
+        ${cells}
+      </tr>`;
+    }).filter(Boolean).join('');
+
+    const totalCells = months.map(e => {
+      const col = e.balance >= 0 ? 'var(--accent)' : 'var(--danger)';
+      return `<td style="padding:4px 6px;text-align:right;font-size:0.8rem;font-weight:700;color:${col};white-space:nowrap">${fmtS(e.balance)}</td>`;
+    }).join('');
+
+    accountSummaryHtml = `
+      <div style="overflow-x:auto;margin-bottom:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+          <thead><tr style="border-bottom:2px solid var(--border)">
+            <th style="padding:4px 6px;text-align:left;font-size:0.72rem;color:var(--muted)">Compte</th>
+            ${headerCols}
+          </tr></thead>
+          <tbody>
+            ${accRows}
+            <tr style="border-top:2px solid var(--primary)">
+              <td style="padding:4px 6px;font-size:0.8rem;font-weight:700">Total</td>
+              ${totalCells}
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
+  }
+
   // Table : une ligne par opération avec solde courant
   const fmtN = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
   let prevMonth = '';
@@ -1495,6 +1541,7 @@ function renderProjection() {
   </tr>`;
 
   document.getElementById('proj-table').innerHTML = `
+    ${accountSummaryHtml}
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="border-bottom:2px solid var(--border)">
         <th style="padding:6px 8px;text-align:left;font-size:0.75rem;color:var(--muted)">Opération</th>
