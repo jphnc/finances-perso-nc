@@ -153,8 +153,16 @@ function initGoogleAuth() {
   });
 }
 let unlocked = false;
+let authRetried = false;
 function onTokenReceived(resp) {
-  if (resp.error) { toast('Erreur auth : ' + resp.error); return; }
+  if (resp.error) {
+    if (!authRetried) {
+      authRetried = true;
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    }
+    return;
+  }
+  authRetried = false;
   accessToken = resp.access_token;
   localStorage.setItem('gToken', accessToken);
   syncFromDrive();
