@@ -90,15 +90,10 @@
             <option value="24">2 ans</option>
             <option value="60">5 ans</option>
           </select>
-          <select id="proj-cutday" style="flex:1;min-width:100px">
-            <option value="0">Fin de mois</option>
-            <option value="1">Le 1</option>
-            <option value="5">Le 5</option>
-            <option value="10">Le 10</option>
-            <option value="15">Le 15</option>
-            <option value="20">Le 20</option>
-            <option value="25">Le 25</option>
-          </select>
+          <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:100px">
+            <label style="font-size:0.8rem;color:var(--muted);white-space:nowrap;margin:0">Jour :</label>
+            <input type="number" id="proj-cutday" min="1" max="31" placeholder="31" style="width:55px;padding:8px;text-align:center;font-weight:700" inputmode="numeric"/>
+          </div>
         </div>
         <div id="proj-chart" style="overflow-x:auto;margin-bottom:12px"></div>
         <div id="proj-table" style="overflow-x:auto;font-size:0.8rem"></div>

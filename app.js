@@ -1265,11 +1265,19 @@ function scheduledOpsInMonth(year, month, accountFilter) {
   return result;
 }
 
-// Calcul du solde à une date donnée d'un mois (ops réelles + programmées pour les mois futurs)
-// cutDay = 0 → fin de mois, sinon jour précis (1-31)
+// Calcul du solde entre deux dates de cycle
+// cutDay = 0 ou vide → fin de mois classique
+// cutDay = 25 → le solde au 25 du mois = toutes ops du 25 du mois précédent+1 au 25 de ce mois
 function calcBalanceAtDate(accountFilter, year, month, cutDay) {
-  const day = cutDay || new Date(year, month + 1, 0).getDate(); // 0 = dernier jour du mois
-  const mCut = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  // Date de fin du cycle pour ce mois
+  let cutDate;
+  if (cutDay && cutDay > 0 && cutDay < 31) {
+    cutDate = `${year}-${String(month+1).padStart(2,'0')}-${String(cutDay).padStart(2,'0')}`;
+  } else {
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    cutDate = `${year}-${String(month+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  }
+
   const now = new Date();
   const currentMonth = now.getFullYear() * 12 + now.getMonth();
   const targetMonth = year * 12 + month;
@@ -1278,13 +1286,21 @@ function calcBalanceAtDate(accountFilter, year, month, cutDay) {
     const acc = appData.accounts.find(a => a.name === accountFilter);
     const initial = acc ? (acc.initialBalance || 0) : 0;
     const realOps = appData.operations.filter(op =>
-      op.account === accountFilter && op.opType !== 'Programmee' && op.date <= mCut);
+      op.account === accountFilter && op.opType !== 'Programmee' && op.date <= cutDate);
     let bal = initial + realOps.reduce((s, op) =>
       op.type === 'credit' ? s + op.amount : s - op.amount, 0);
     for (let m = currentMonth + 1; m <= targetMonth; m++) {
-      const schOps = scheduledOpsInMonth(Math.floor(m/12), m%12, accountFilter);
-      // Si cutDay > 0, ne compter que les ops programmées dont le jour <= cutDay
-      const filtered = cutDay ? schOps.filter(op => {
+      const y2 = Math.floor(m/12), m2 = m%12;
+      const schOps = scheduledOpsInMonth(y2, m2, accountFilter);
+      let mCut;
+      if (cutDay && cutDay > 0 && cutDay < 31) {
+        mCut = `${y2}-${String(m2+1).padStart(2,'0')}-${String(cutDay).padStart(2,'0')}`;
+      } else {
+        const ld = new Date(y2, m2 + 1, 0).getDate();
+        mCut = `${y2}-${String(m2+1).padStart(2,'0')}-${String(ld).padStart(2,'0')}`;
+      }
+      // Pour le mois cible, ne compter que les ops dont la date <= cutDate
+      const filtered = (m === targetMonth && cutDay) ? schOps.filter(op => {
         const opDay = parseInt((op.nextPayment || op.date).split('-')[2]);
         return opDay <= cutDay;
       }) : schOps;
@@ -1497,7 +1513,7 @@ document.getElementById('btn-toggle-projection').addEventListener('click', () =>
 });
 document.getElementById('proj-account').addEventListener('change', renderProjection);
 document.getElementById('proj-horizon').addEventListener('change', renderProjection);
-document.getElementById('proj-cutday').addEventListener('change', renderProjection);
+document.getElementById('proj-cutday').addEventListener('input', renderProjection);
 
 // ── OPÉRATIONS PROGRAMMÉES ───────────────────────────────────────────────────
 const FREQ_LABELS = {
