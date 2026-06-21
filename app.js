@@ -179,8 +179,8 @@ window.addEventListener('load', () => {
   const hasData = loadLocal();
   const locked = checkLockScreen();
   if (!locked) {
-    unlocked = true;
     if (hasData) {
+      unlocked = true;
       autoBackup();
       renderAll();
       showScreen('screen-main');
