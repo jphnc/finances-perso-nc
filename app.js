@@ -741,12 +741,18 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => showTab(btn.dataset.tab));
 });
 document.getElementById('btn-sync').addEventListener('click', () => {
-  if (!accessToken) { toast('Connectez-vous d\'abord'); return; }
+  if (!accessToken) {
+    if (tokenClient) { tokenClient.requestAccessToken({ prompt: '' }); return; }
+    toast('⚠️ Google API pas encore chargée'); return;
+  }
   syncFromDrive();
 });
 
 document.getElementById('btn-force-upload').addEventListener('click', async () => {
-  if (!accessToken) { toast('⚠️ Connectez-vous à Google d\'abord (bouton 🔄)'); return; }
+  if (!accessToken) {
+    if (tokenClient) { tokenClient.requestAccessToken({ prompt: '' }); toast('⏳ Connexion Google...'); return; }
+    toast('⚠️ Google API pas encore chargée'); return;
+  }
   try {
     document.getElementById('sync-detail').textContent = '⏳ Envoi en cours...';
     await uploadToDrive();
@@ -758,7 +764,10 @@ document.getElementById('btn-force-upload').addEventListener('click', async () =
 });
 
 document.getElementById('btn-force-download').addEventListener('click', async () => {
-  if (!accessToken) { toast('⚠️ Connectez-vous à Google d\'abord (bouton 🔄)'); return; }
+  if (!accessToken) {
+    if (tokenClient) { tokenClient.requestAccessToken({ prompt: '' }); toast('⏳ Connexion Google...'); return; }
+    toast('⚠️ Google API pas encore chargée'); return;
+  }
   try {
     document.getElementById('sync-detail').textContent = '⏳ Téléchargement...';
     const remote = await downloadFromDrive();
