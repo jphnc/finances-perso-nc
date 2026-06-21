@@ -279,6 +279,14 @@
       <button id="btn-install-app" class="btn-primary hidden" style="background:var(--accent);margin-bottom:4px">📲 Installer l'application sur cet appareil</button>
       <div id="install-hint" class="hidden" style="font-size:0.8rem;color:var(--muted);background:var(--bg);padding:10px;border-radius:10px;margin-bottom:4px"></div>
       <div class="settings-row">
+        <span>Mode sombre</span>
+        <label style="position:relative;width:50px;height:28px;margin:0">
+          <input type="checkbox" id="cfg-dark-mode" style="opacity:0;width:0;height:0">
+          <span id="dark-toggle" style="position:absolute;inset:0;background:var(--border);border-radius:14px;cursor:pointer;transition:background 0.3s"></span>
+          <span id="dark-toggle-dot" style="position:absolute;top:3px;left:3px;width:22px;height:22px;background:white;border-radius:50%;transition:transform 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></span>
+        </label>
+      </div>
+      <div class="settings-row">
         <span>Compte Google</span>
         <span id="display-email" class="muted">—</span>
       </div>
@@ -301,6 +309,10 @@
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Comptes inclus dans le solde total</p>
       <div id="cfg-total-accounts" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Budgets mensuels par catégorie</p>
+      <div id="cfg-budgets" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <button id="btn-save-budgets" class="btn-primary" style="background:var(--accent)">💾 Enregistrer les budgets</button>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">💳 Carte à débit différé</p>
       <label>Compte carte
         <select id="cfg-card-account" style="margin-bottom:4px"></select>
@@ -312,6 +324,16 @@
         <input type="number" id="cfg-card-limit" min="0" placeholder="500000" inputmode="numeric"/>
       </label>
       <button id="btn-save-card-cfg" class="btn-primary" style="background:var(--accent)">💾 Enregistrer la config carte</button>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Export CSV</p>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <select id="cfg-export-account" style="flex:1"></select>
+        <button id="btn-export-csv" class="btn-primary" style="flex:0 0 auto;background:var(--accent);padding:10px 16px">📊 Exporter</button>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Alertes de solde minimum</p>
+      <div id="cfg-alerts" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <button id="btn-save-alerts" class="btn-primary" style="background:var(--accent)">💾 Enregistrer les alertes</button>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Synchronisation Drive</p>
       <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -354,7 +376,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
       <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:6px"></p>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v44</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v45</p>
     </div>
   </div>
 

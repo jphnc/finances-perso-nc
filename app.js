@@ -496,7 +496,7 @@ function renderDashboard() {
         <span class="acc-icon">${isDeferred ? '💳' : '🏦'}</span>
         <div class="op-info" style="flex:1">
           <div class="op-label">${name}</div>
-          <div class="op-meta">${ops} opérations</div>
+          <div class="op-meta">${ops} opérations${(appData.alerts && appData.alerts[name] !== undefined && bal < appData.alerts[name]) ? ' · ⚠️ sous le seuil' : ''}</div>
         </div>
         <span class="op-amount ${cls}">${fmt(bal)}</span>
         ${extraHtml}
@@ -644,6 +644,9 @@ function renderAll() {
   updateSyncStatus();
   renderBackupList();
   renderAccountsConfig();
+  renderBudgetsConfig();
+  renderAlertsConfig();
+  populateExportAccount();
   updatePwdStatus();
   populateTotalAccountsConfig();
   populateCardConfig();
@@ -932,6 +935,36 @@ function populateTotalAccountsConfig() {
   });
 }
 
+// ── BUDGETS PAR CATÉGORIE ────────────────────────────────────────────────────
+const ALL_CATEGORIES = ['Alimentation','Transport','Sante','Loisirs','Logement','Telecom','Revenus','Autre','Virement'];
+
+function renderBudgetsConfig() {
+  const budgets = appData.budgets || {};
+  const container = document.getElementById('cfg-budgets');
+  container.innerHTML = ALL_CATEGORIES.filter(c => c !== 'Revenus' && c !== 'Virement').map(cat => {
+    const val = budgets[cat] || '';
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <span style="flex:1;font-size:0.85rem">${CAT_ICONS[cat] || '📦'} ${cat}</span>
+      <input type="number" data-budget-cat="${cat}" value="${val}" placeholder="—" min="0" inputmode="numeric" style="width:100px;padding:6px;text-align:right;font-size:0.85rem"/>
+      <span style="font-size:0.78rem;color:var(--muted)">F</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btn-save-budgets').addEventListener('click', () => {
+  if (!appData.budgets) appData.budgets = {};
+  document.querySelectorAll('[data-budget-cat]').forEach(inp => {
+    const cat = inp.dataset.budgetCat;
+    const val = parseInt(inp.value, 10);
+    if (val > 0) appData.budgets[cat] = val;
+    else delete appData.budgets[cat];
+  });
+  saveLocal();
+  renderAll();
+  toast('✅ Budgets enregistrés');
+  if (accessToken) uploadToDrive().catch(() => {});
+});
+
 // ── CONFIG CARTE DÉBIT DIFFÉRÉ ───────────────────────────────────────────────
 function populateCardConfig() {
   const sel = document.getElementById('cfg-card-account');
@@ -1219,6 +1252,30 @@ document.getElementById('btn-check-update').addEventListener('click', async () =
   }
 });
 
+// ── MODE SOMBRE ─────────────────────────────────────────────────────────────
+function applyDarkMode(dark) {
+  document.body.classList.toggle('dark-mode', dark);
+  const dot = document.getElementById('dark-toggle-dot');
+  const bg = document.getElementById('dark-toggle');
+  if (dot) dot.style.transform = dark ? 'translateX(22px)' : 'translateX(0)';
+  if (bg) bg.style.background = dark ? 'var(--accent)' : 'var(--border)';
+  const cb = document.getElementById('cfg-dark-mode');
+  if (cb) cb.checked = dark;
+}
+
+(function() {
+  const saved = localStorage.getItem('darkMode');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = saved !== null ? saved === 'true' : prefersDark;
+  applyDarkMode(dark);
+})();
+
+document.getElementById('cfg-dark-mode').addEventListener('change', (e) => {
+  const dark = e.target.checked;
+  localStorage.setItem('darkMode', dark);
+  applyDarkMode(dark);
+});
+
 // ── AIDE ────────────────────────────────────────────────────────────────────
 document.getElementById('btn-help').addEventListener('click', () => {
   document.getElementById('modal-help').classList.remove('hidden');
@@ -1226,6 +1283,86 @@ document.getElementById('btn-help').addEventListener('click', () => {
 document.getElementById('btn-help-close').addEventListener('click', () => {
   document.getElementById('modal-help').classList.add('hidden');
 });
+
+// ── EXPORT CSV ──────────────────────────────────────────────────────────────
+function populateExportAccount() {
+  const names = getAccountNames();
+  const sel = document.getElementById('cfg-export-account');
+  sel.innerHTML = '<option value="">Tous les comptes</option>' +
+    names.map(n => `<option value="${n}">${n}</option>`).join('');
+}
+
+document.getElementById('btn-export-csv').addEventListener('click', () => {
+  const accFilter = document.getElementById('cfg-export-account').value;
+  let ops = [...appData.operations].sort((a, b) => a.date.localeCompare(b.date));
+  if (accFilter) ops = ops.filter(op => op.account === accFilter);
+
+  const BOM = '﻿';
+  const header = 'Date;Libelle;Debit;Credit;Compte;Categorie;Type\n';
+  const rows = ops.map(op => {
+    const debit = op.type === 'debit' ? op.amount : '';
+    const credit = op.type === 'credit' ? op.amount : '';
+    return `${op.date};${op.label};${debit};${credit};${op.account};${op.category || ''};${op.opType || ''}`;
+  }).join('\n');
+
+  const blob = new Blob([BOM + header + rows], { type: 'text/csv;charset=utf-8' });
+  const name = accFilter || 'tous-comptes';
+  const fileName = `export-${name}-${today()}.csv`;
+
+  if (window.showSaveFilePicker) {
+    window.showSaveFilePicker({ suggestedName: fileName, types: [{ accept: { 'text/csv': ['.csv'] } }] })
+      .then(async h => { const w = await h.createWritable(); await w.write(blob); await w.close(); toast('📊 CSV exporté'); })
+      .catch(e => { if (e.name !== 'AbortError') toast('❌ ' + e.message); });
+  } else {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('📊 CSV exporté');
+  }
+});
+
+// ── ALERTES DE SOLDE ────────────────────────────────────────────────────────
+function renderAlertsConfig() {
+  const alerts = appData.alerts || {};
+  const names = getAccountNames();
+  const container = document.getElementById('cfg-alerts');
+  container.innerHTML = names.map(name => {
+    const val = alerts[name] !== undefined ? alerts[name] : '';
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <span style="flex:1;font-size:0.85rem">${name}</span>
+      <input type="number" data-alert-acc="${name}" value="${val}" placeholder="—" inputmode="numeric" style="width:100px;padding:6px;text-align:right;font-size:0.85rem"/>
+      <span style="font-size:0.78rem;color:var(--muted)">F</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btn-save-alerts').addEventListener('click', () => {
+  if (!appData.alerts) appData.alerts = {};
+  document.querySelectorAll('[data-alert-acc]').forEach(inp => {
+    const acc = inp.dataset.alertAcc;
+    const val = parseInt(inp.value, 10);
+    if (!isNaN(val)) appData.alerts[acc] = val;
+    else delete appData.alerts[acc];
+  });
+  saveLocal();
+  renderAll();
+  toast('✅ Alertes enregistrées');
+  if (accessToken) uploadToDrive().catch(() => {});
+});
+
+function checkAlerts() {
+  const alerts = appData.alerts || {};
+  const names = getAccountNames();
+  for (const name of names) {
+    if (alerts[name] === undefined) continue;
+    const bal = calcAccountBalance(name);
+    if (bal < alerts[name]) {
+      toast(`⚠️ ${name} : ${fmt(bal)} — sous le seuil de ${fmt(alerts[name])}`, 5000);
+    }
+  }
+}
 
 // ── SAUVEGARDE AUTO SUR DISQUE ───────────────────────────────────────────────
 let backupDirHandle = null;
@@ -1407,17 +1544,31 @@ function renderStats() {
   const sorted = Object.entries(bycat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxVal = sorted[0]?.[1] || 1;
 
+  const budgets = appData.budgets || {};
   const catHtml = sorted.length ? sorted.map(([cat, val]) => {
-    const pct = Math.round((val / maxVal) * 100);
+    const budget = budgets[cat];
     const col = CAT_COLORS[cat] || '#546e7a';
+    let barHtml;
+    if (budget) {
+      const pct = Math.min(Math.round((val / budget) * 100), 100);
+      const overPct = val > budget ? Math.min(Math.round(((val - budget) / budget) * 100), 100) : 0;
+      const barCol = val > budget ? 'var(--danger)' : val > budget * 0.8 ? '#ef9f27' : col;
+      barHtml = `<div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden;position:relative">
+        <div style="width:${pct}%;height:100%;background:${barCol};border-radius:4px;transition:width 0.4s"></div>
+      </div>`;
+    } else {
+      const pct = Math.round((val / maxVal) * 100);
+      barHtml = `<div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${col};border-radius:4px;transition:width 0.4s"></div>
+      </div>`;
+    }
+    const budgetLabel = budget ? ` / ${fmt(budget)}${val > budget ? ' ⚠️' : ''}` : '';
     return `<div style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:3px">
         <span>${CAT_ICONS[cat] || '📦'} ${cat}</span>
-        <span style="font-weight:600">${fmt(val)}</span>
+        <span style="font-weight:600;${val > budget && budget ? 'color:var(--danger)' : ''}">${fmt(val)}${budgetLabel}</span>
       </div>
-      <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
-        <div style="width:${pct}%;height:100%;background:${col};border-radius:4px;transition:width 0.4s"></div>
-      </div>
+      ${barHtml}
     </div>`;
   }).join('') : '<div style="color:var(--muted);font-size:0.85rem;text-align:center;padding:8px">Aucune dépense ce mois</div>';
 
