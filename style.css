@@ -291,6 +291,16 @@ input:focus, select:focus { border-color: var(--primary-light); background: whit
 /* ---- Utilitaires ---- */
 .hidden { display: none !important; }
 
+@media print {
+  body { background: white; }
+  .bottom-nav, .top-header button, .filter-bar, .balance-card,
+  #screen-login, #screen-lock, .nav-btn, .btn-primary, .btn-secondary,
+  #toast, .modal { display: none !important; }
+  .screen, .tab-content { display: block !important; padding: 0; }
+  #print-area { display: block !important; }
+  #screen-main { padding-bottom: 0; max-width: 100%; }
+}
+
 @media (min-width: 600px) {
   #screen-main { max-width: 480px; margin: 0 auto; }
   .bottom-nav { max-width: 480px; left: 50%; transform: translateX(-50%); }

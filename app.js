@@ -43,6 +43,87 @@ function showTab(name) {
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
 }
 
+// ── MOT DE PASSE ────────────────────────────────────────────────────────────
+async function hashPassword(pwd) {
+  const data = new TextEncoder().encode(pwd);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function checkLockScreen() {
+  const pwdHash = localStorage.getItem('finances_pwd');
+  if (pwdHash) {
+    showScreen('screen-lock');
+    document.getElementById('lock-password').focus();
+    return true;
+  }
+  return false;
+}
+
+document.getElementById('btn-unlock').addEventListener('click', async () => {
+  const pwd = document.getElementById('lock-password').value;
+  if (!pwd) return;
+  const hash = await hashPassword(pwd);
+  const stored = localStorage.getItem('finances_pwd');
+  if (hash === stored) {
+    document.getElementById('lock-password').value = '';
+    document.getElementById('lock-error').classList.add('hidden');
+    const hasData = loadLocal();
+    if (hasData) {
+      autoBackup();
+      renderAll();
+      showScreen('screen-main');
+    } else {
+      showScreen('screen-login');
+    }
+    // Sync Drive silencieuse
+    const waitG = setInterval(() => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        clearInterval(waitG);
+        initGoogleAuth();
+        const saved = localStorage.getItem('gToken');
+        if (saved) tokenClient.requestAccessToken({ prompt: '' });
+      }
+    }, 200);
+  } else {
+    document.getElementById('lock-error').textContent = 'Mot de passe incorrect';
+    document.getElementById('lock-error').classList.remove('hidden');
+  }
+});
+
+document.getElementById('lock-password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btn-unlock').click();
+});
+
+document.getElementById('btn-pwd-set').addEventListener('click', async () => {
+  const pwd = document.getElementById('cfg-pwd-new').value;
+  const confirm = document.getElementById('cfg-pwd-confirm').value;
+  if (!pwd) { toast('⚠️ Mot de passe requis'); return; }
+  if (pwd !== confirm) { toast('⚠️ Les mots de passe ne correspondent pas'); return; }
+  if (pwd.length < 4) { toast('⚠️ Minimum 4 caractères'); return; }
+  const hash = await hashPassword(pwd);
+  localStorage.setItem('finances_pwd', hash);
+  document.getElementById('cfg-pwd-new').value = '';
+  document.getElementById('cfg-pwd-confirm').value = '';
+  updatePwdStatus();
+  toast('🔒 Mot de passe défini');
+});
+
+document.getElementById('btn-pwd-remove').addEventListener('click', () => {
+  if (!confirm('Supprimer le mot de passe ?')) return;
+  localStorage.removeItem('finances_pwd');
+  updatePwdStatus();
+  toast('🔓 Mot de passe supprimé');
+});
+
+function updatePwdStatus() {
+  const has = !!localStorage.getItem('finances_pwd');
+  document.getElementById('pwd-status').innerHTML = has
+    ? '<span style="color:var(--accent)">🔒 Mot de passe actif</span>'
+    : '<span style="color:var(--muted)">🔓 Aucun mot de passe</span>';
+  document.getElementById('btn-pwd-remove').style.display = has ? '' : 'none';
+}
+
 // ── STOCKAGE LOCAL ───────────────────────────────────────────────────────────
 function saveLocal() {
   localStorage.setItem('finances_data', JSON.stringify(appData));
@@ -78,13 +159,16 @@ document.getElementById('btn-skip-login').addEventListener('click', () => {
 });
 window.addEventListener('load', () => {
   const hasData = loadLocal();
-  if (hasData) {
+  const locked = checkLockScreen();
+  if (!locked && hasData) {
     autoBackup();
     renderAll();
     showScreen('screen-main');
   }
   setDefaultDate();
+  updatePwdStatus();
 
+  if (locked) return;
   const waitGoogle = setInterval(() => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
@@ -466,6 +550,7 @@ function renderAll() {
   document.getElementById('display-email').textContent = localStorage.getItem('userEmail') || '—';
   updateSyncStatus();
   renderBackupList();
+  updatePwdStatus();
   populateTotalAccountsConfig();
   populateCardConfig();
 }
@@ -690,6 +775,140 @@ document.getElementById('btn-save-card-cfg').addEventListener('click', () => {
   renderAll();
   toast('✅ Configuration carte enregistrée');
   if (accessToken) uploadToDrive().catch(() => {});
+});
+
+// ── IMPRESSION ──────────────────────────────────────────────────────────────
+function printContent(title, html) {
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>${title}</title>
+    <style>
+      body { font-family: -apple-system, sans-serif; padding: 20px; color: #1c1c1e; font-size: 12px; }
+      h1 { font-size: 18px; margin-bottom: 4px; }
+      h2 { font-size: 14px; color: #6b7280; margin-bottom: 12px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+      th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #1a237e; font-size: 11px; color: #6b7280; }
+      td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+      .right { text-align: right; }
+      .debit { color: #e53935; }
+      .credit { color: #43a047; }
+      .bold { font-weight: 700; }
+      .total-row { border-top: 2px solid #1a237e; font-weight: 700; font-size: 13px; }
+      .section { margin-top: 20px; }
+      @media print { body { padding: 0; } }
+    </style>
+  </head><body>${html}
+    <script>window.print();window.onafterprint=()=>window.close();<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+document.getElementById('btn-print-dashboard').addEventListener('click', () => {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const names = getAccountNames();
+  let rows = '';
+  let total = 0;
+  for (const name of names) {
+    const bal = calcAccountBalance(name);
+    const acc = appData.accounts.find(a => a.name === name);
+    const included = !acc || acc.includeInTotal !== false;
+    if (included) total += bal;
+    const cls = bal >= 0 ? 'credit' : 'debit';
+    const ops = appData.operations.filter(op => op.account === name && op.opType !== 'Programmee').length;
+    rows += `<tr>
+      <td>${name}</td>
+      <td class="right">${ops}</td>
+      <td class="right ${cls} bold">${fmt(bal)}</td>
+    </tr>`;
+  }
+
+  const html = `
+    <h1>Finances Perso NC</h1>
+    <h2>Résumé des comptes au ${dateStr}</h2>
+    <table>
+      <thead><tr><th>Compte</th><th class="right">Opérations</th><th class="right">Solde</th></tr></thead>
+      <tbody>${rows}
+        <tr class="total-row"><td>Solde total</td><td></td><td class="right">${fmt(total)}</td></tr>
+      </tbody>
+    </table>`;
+  printContent('Résumé comptes - ' + dateStr, html);
+});
+
+document.getElementById('btn-print-ops').addEventListener('click', () => {
+  const accFilter = document.getElementById('filter-account').value;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  let ops = [...appData.operations].sort((a, b) => a.date.localeCompare(b.date));
+  if (accFilter) ops = ops.filter(op => op.account === accFilter);
+
+  const useMonth = !!accFilter;
+  if (useMonth) {
+    const monthStart = `${opsYear}-${String(opsMonth+1).padStart(2,'0')}-01`;
+    const monthEnd   = `${opsYear}-${String(opsMonth+1).padStart(2,'0')}-31`;
+    ops = ops.filter(op => op.date >= monthStart && op.date <= monthEnd && op.opType !== 'Programmee');
+
+    const acc = appData.accounts.find(a => a.name === accFilter);
+    const initial = acc ? (acc.initialBalance || 0) : 0;
+    const beforeOps = appData.operations.filter(op =>
+      op.account === accFilter && op.date < monthStart && op.opType !== 'Programmee');
+    let running = initial + beforeOps.reduce((s, op) =>
+      op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+
+    const monthLabel = new Date(opsYear, opsMonth, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    let rows = '';
+    for (const op of ops) {
+      const delta = op.type === 'credit' ? op.amount : -op.amount;
+      running += delta;
+      const sign = op.type === 'credit' ? '+' : '-';
+      const cls = op.type === 'credit' ? 'credit' : 'debit';
+      rows += `<tr>
+        <td>${formatDate(op.date)}</td>
+        <td>${op.label}</td>
+        <td>${op.category || ''}</td>
+        <td class="right ${cls}">${sign}${fmt(op.amount)}</td>
+        <td class="right bold">${fmt(running)}</td>
+      </tr>`;
+    }
+
+    const html = `
+      <h1>${accFilter}</h1>
+      <h2>${monthLabel} — ${ops.length} opérations</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th class="right">Montant</th><th class="right">Solde</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    printContent(`${accFilter} - ${monthLabel}`, html);
+  } else {
+    const typeFilter = document.getElementById('filter-type').value;
+    const catFilter = document.getElementById('filter-category').value;
+    if (typeFilter) ops = ops.filter(op => op.type === typeFilter);
+    if (catFilter) ops = ops.filter(op => op.category === catFilter);
+    ops = ops.reverse();
+
+    let rows = '';
+    for (const op of ops.slice(0, 500)) {
+      const sign = op.type === 'credit' ? '+' : '-';
+      const cls = op.type === 'credit' ? 'credit' : 'debit';
+      rows += `<tr>
+        <td>${formatDate(op.date)}</td>
+        <td>${op.label}</td>
+        <td>${op.account}</td>
+        <td>${op.category || ''}</td>
+        <td class="right ${cls}">${sign}${fmt(op.amount)}</td>
+      </tr>`;
+    }
+
+    const html = `
+      <h1>Opérations</h1>
+      <h2>${ops.length} opérations — imprimé le ${dateStr}</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Libellé</th><th>Compte</th><th>Catégorie</th><th class="right">Montant</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    printContent('Opérations - ' + dateStr, html);
+  }
 });
 
 // ── SAUVEGARDES LOCALES ──────────────────────────────────────────────────────

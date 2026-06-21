@@ -10,6 +10,18 @@
 </head>
 <body>
 
+<!-- ===== ÉCRAN DE VERROUILLAGE ===== -->
+<div id="screen-lock" class="screen">
+  <div class="login-card">
+    <div class="app-icon">🔒</div>
+    <h1>Finances Perso NC</h1>
+    <p class="subtitle">Entrez votre mot de passe</p>
+    <input type="password" id="lock-password" placeholder="Mot de passe" style="text-align:center;font-size:1.1rem;padding:14px;margin-bottom:12px" autocomplete="current-password"/>
+    <button id="btn-unlock" class="btn-primary" style="width:100%">🔓 Déverrouiller</button>
+    <p id="lock-error" class="hidden" style="color:#e53935;font-size:0.85rem;margin-top:8px"></p>
+  </div>
+</div>
+
 <!-- ===== ÉCRAN DE CONNEXION ===== -->
 <div id="screen-login" class="screen active">
   <div class="login-card">
@@ -46,6 +58,7 @@
   <div id="tab-dashboard" class="tab-content active">
     <header class="top-header">
       <h2>Mes comptes</h2>
+      <button id="btn-print-dashboard" class="icon-btn" title="Imprimer">🖨️</button>
       <button id="btn-sync" class="icon-btn" title="Synchroniser">🔄</button>
     </header>
 
@@ -127,6 +140,7 @@
   <div id="tab-operations" class="tab-content">
     <header class="top-header">
       <h2 id="ops-title">Toutes les opérations</h2>
+      <button id="btn-print-ops" class="icon-btn" title="Imprimer">🖨️</button>
     </header>
     <!-- Navigation mois (visible seulement si un compte est sélectionné) -->
     <div id="ops-month-nav" class="hidden" style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:12px;padding:10px 16px;margin-bottom:10px;box-shadow:var(--shadow)">
@@ -296,6 +310,15 @@
         <button id="btn-backup-restore" class="btn-secondary" style="flex:1">📂 Restaurer</button>
       </div>
       <input type="file" id="backup-file-input" accept=".json" style="display:none"/>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">🔒 Mot de passe</p>
+      <div id="pwd-status" style="font-size:0.85rem;margin-bottom:8px"></div>
+      <input type="password" id="cfg-pwd-new" placeholder="Nouveau mot de passe" style="margin-bottom:6px" autocomplete="new-password"/>
+      <input type="password" id="cfg-pwd-confirm" placeholder="Confirmer le mot de passe" style="margin-bottom:6px" autocomplete="new-password"/>
+      <div style="display:flex;gap:8px">
+        <button id="btn-pwd-set" class="btn-primary" style="flex:1;background:var(--accent)">💾 Définir</button>
+        <button id="btn-pwd-remove" class="btn-secondary" style="flex:0 0 auto;color:var(--danger);border-color:var(--danger)">Supprimer</button>
+      </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Zone dangereuse</p>
       <button id="btn-reset" class="btn-secondary" style="margin-top:4px;color:var(--danger);border-color:var(--danger)">🗑️ Réinitialiser toutes les données</button>
