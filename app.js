@@ -1730,10 +1730,15 @@ window.editOp = function(id) {
   document.getElementById('edit-op-date').value     = op.date;
   document.getElementById('edit-op-label').value    = op.label;
   document.getElementById('edit-op-amount').value   = op.amount;
-  document.getElementById('edit-op-type').value     = op.opType === 'Virement' ? 'virement' : op.type;
+  const isVir = op.opType === 'Virement' || (op.label && op.label.match(/^\[.+\]$/));
+  document.getElementById('edit-op-type').value     = isVir ? 'virement' : op.type;
   document.getElementById('edit-op-account').value  = op.account;
   document.getElementById('edit-op-category').value = op.category || 'Autre';
   toggleEditDest();
+  if (isVir) {
+    const destMatch = op.label.match(/^\[(.+)\]$/);
+    if (destMatch) document.getElementById('edit-op-dest').value = destMatch[1];
+  }
   document.getElementById('modal-edit-op').classList.remove('hidden');
 };
 
@@ -1762,7 +1767,22 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
     const dest = document.getElementById('edit-op-dest').value;
     if (account === dest) { toast('⚠️ Source et destination identiques'); return; }
 
-    // Transformer l'opération existante en débit (source)
+    // Trouver l'ancien crédit correspondant (même date, même montant, label miroir)
+    const oldDestMatch = op.label.match(/^\[(.+)\]$/);
+    const oldDest = oldDestMatch ? oldDestMatch[1] : null;
+    let existingCredit = null;
+    if (oldDest) {
+      existingCredit = appData.operations.find(o =>
+        o.id !== op.id &&
+        o.date === op.date &&
+        o.amount === op.amount &&
+        o.account === oldDest &&
+        o.type === 'credit' &&
+        o.label === `[${op.account}]`
+      );
+    }
+
+    // Modifier l'opération débit (source)
     op.date = date;
     op.label = `[${dest}]`;
     op.amount = amount;
@@ -1771,18 +1791,21 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
     op.category = 'Virement';
     op.opType = 'Virement';
 
-    // Créer l'opération crédit (destination)
-    appData.operations.push({
-      id: uid(),
-      date,
-      label: `[${account}]`,
-      amount,
-      type: 'credit',
-      account: dest,
-      category: 'Virement',
-      opType: 'Virement',
-    });
-    toast(`✅ Converti en virement : ${account} → ${dest}`);
+    if (existingCredit) {
+      // Mettre à jour le crédit existant
+      existingCredit.date = date;
+      existingCredit.label = `[${account}]`;
+      existingCredit.amount = amount;
+      existingCredit.account = dest;
+      toast(`✅ Virement modifié : ${account} → ${dest}`);
+    } else {
+      // Créer le crédit (conversion depuis débit/crédit simple)
+      appData.operations.push({
+        id: uid(), date, label: `[${account}]`, amount,
+        type: 'credit', account: dest, category: 'Virement', opType: 'Virement',
+      });
+      toast(`✅ Converti en virement : ${account} → ${dest}`);
+    }
   } else {
     op.date     = date;
     op.label    = label;
