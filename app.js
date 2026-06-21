@@ -1233,26 +1233,20 @@ function addMonths(dateStr, n) {
 }
 
 function scheduledOpsInMonth(year, month, accountFilter) {
-  const scheduled = appData.operations.filter(op =>
-    op.opType === 'Programmee' &&
-    (!accountFilter || op.account === accountFilter)
-  );
+  // Chercher les ops programmées qui concernent ce compte
+  // (soit comme compte source, soit comme destination d'un virement)
+  const allScheduled = appData.operations.filter(op => op.opType === 'Programmee');
   const result = [];
-  for (const op of scheduled) {
+
+  for (const op of allScheduled) {
     const base = op.nextPayment || op.date;
     if (!base) continue;
     const freq = op.detail || 'mensuelle';
     const baseDate = new Date(base + 'T00:00:00');
-    const baseYear = baseDate.getFullYear();
-    const baseMonth = baseDate.getMonth(); // 0-indexed
-    const targetMonth = month; // 0-indexed
-    const targetYear = year;
-    const diffMonths = (targetYear - baseYear) * 12 + (targetMonth - baseMonth);
+    const diffMonths = (year - baseDate.getFullYear()) * 12 + (month - baseDate.getMonth());
     if (diffMonths < 0) continue;
     if (op.endDate) {
-      const endD = new Date(op.endDate + 'T00:00:00');
-      const lastMonth = new Date(targetYear, targetMonth, 1);
-      if (lastMonth > endD) continue;
+      if (new Date(year, month, 1) > new Date(op.endDate + 'T00:00:00')) continue;
     }
     let applies = false;
     if (freq === 'ponctuelle') applies = diffMonths === 0;
@@ -1260,13 +1254,40 @@ function scheduledOpsInMonth(year, month, accountFilter) {
     else if (freq === 'bimensuelle') applies = diffMonths >= 0 && diffMonths % 2 === 0;
     else if (freq === 'trimestrielle') applies = diffMonths >= 0 && diffMonths % 3 === 0;
     else if (freq === 'annuelle') applies = diffMonths >= 0 && diffMonths % 12 === 0;
-    if (applies) {
-      // Ajuster la date au mois demandé (garder le même jour)
-      const baseDay = baseDate.getDate();
-      const lastDayOfTarget = new Date(targetYear, targetMonth + 1, 0).getDate();
-      const adjustedDay = Math.min(baseDay, lastDayOfTarget);
-      const adjustedDate = `${targetYear}-${String(targetMonth+1).padStart(2,'0')}-${String(adjustedDay).padStart(2,'0')}`;
-      result.push({ ...op, date: adjustedDate, nextPayment: adjustedDate });
+    if (!applies) continue;
+
+    const baseDay = baseDate.getDate();
+    const lastDayOfTarget = new Date(year, month + 1, 0).getDate();
+    const adjustedDay = Math.min(baseDay, lastDayOfTarget);
+    const adjustedDate = `${year}-${String(month+1).padStart(2,'0')}-${String(adjustedDay).padStart(2,'0')}`;
+
+    // Détecter si c'est un virement
+    const destMatch = op.label && op.label.match(/^\[(.+)\]$/);
+    const dest = op.virementDest || (destMatch ? destMatch[1] : null);
+    const isVirement = !!dest;
+
+    if (isVirement) {
+      // Côté débit (source)
+      if (!accountFilter || op.account === accountFilter) {
+        result.push({ ...op, date: adjustedDate, nextPayment: adjustedDate });
+      }
+      // Côté crédit (destination)
+      if (!accountFilter || dest === accountFilter) {
+        result.push({
+          ...op,
+          id: op.id + '_credit',
+          date: adjustedDate,
+          nextPayment: adjustedDate,
+          label: `[${op.account}]`,
+          type: 'credit',
+          account: dest,
+        });
+      }
+    } else {
+      // Opération simple
+      if (!accountFilter || op.account === accountFilter) {
+        result.push({ ...op, date: adjustedDate, nextPayment: adjustedDate });
+      }
     }
   }
   return result;
