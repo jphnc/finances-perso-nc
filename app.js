@@ -1260,7 +1260,14 @@ function scheduledOpsInMonth(year, month, accountFilter) {
     else if (freq === 'bimensuelle') applies = diffMonths >= 0 && diffMonths % 2 === 0;
     else if (freq === 'trimestrielle') applies = diffMonths >= 0 && diffMonths % 3 === 0;
     else if (freq === 'annuelle') applies = diffMonths >= 0 && diffMonths % 12 === 0;
-    if (applies) result.push(op);
+    if (applies) {
+      // Ajuster la date au mois demandé (garder le même jour)
+      const baseDay = baseDate.getDate();
+      const lastDayOfTarget = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const adjustedDay = Math.min(baseDay, lastDayOfTarget);
+      const adjustedDate = `${targetYear}-${String(targetMonth+1).padStart(2,'0')}-${String(adjustedDay).padStart(2,'0')}`;
+      result.push({ ...op, date: adjustedDate, nextPayment: adjustedDate });
+    }
   }
   return result;
 }
