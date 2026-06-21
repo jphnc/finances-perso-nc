@@ -1188,6 +1188,14 @@ document.getElementById('backup-file-input').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+// ── AIDE ────────────────────────────────────────────────────────────────────
+document.getElementById('btn-help').addEventListener('click', () => {
+  document.getElementById('modal-help').classList.remove('hidden');
+});
+document.getElementById('btn-help-close').addEventListener('click', () => {
+  document.getElementById('modal-help').classList.add('hidden');
+});
+
 // ── RÉINITIALISATION ─────────────────────────────────────────────────────────
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (!confirm('Effacer toutes les données locales ? Cette action est irréversible.')) return;

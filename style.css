@@ -292,6 +292,19 @@ input:focus, select:focus { border-color: var(--primary-light); background: whit
 .hidden { display: none !important; }
 
 /* Zone d'impression */
+/* ---- Aide ---- */
+.help-section { margin-bottom: 4px; }
+.help-toggle {
+  width: 100%; text-align: left; padding: 10px 12px; background: var(--bg);
+  border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+  color: var(--primary); cursor: pointer; display: flex; align-items: center; gap: 8px;
+}
+.help-toggle:hover { background: var(--border); }
+.help-arrow { font-size: 0.7rem; min-width: 12px; }
+.help-body { padding: 8px 12px 12px 32px; font-size: 0.83rem; color: var(--text); line-height: 1.5; }
+.help-body p { margin-bottom: 6px; }
+.help-body b { color: var(--primary); }
+
 #print-area { display: none; }
 body.printing #print-area { display: block; }
 body.printing #screen-login,

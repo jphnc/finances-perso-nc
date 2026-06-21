@@ -52,6 +52,7 @@
     <button class="nav-btn" data-tab="add-expense">➕<span>Dépense</span></button>
     <button class="nav-btn" data-tab="scheduled">🔁<span>Programmées</span></button>
     <button class="nav-btn" data-tab="settings">⚙️<span>Paramètres</span></button>
+    <button id="btn-help" class="nav-btn" style="flex:0 0 40px">❓</button>
   </nav>
 
   <!-- ---- TAB : Tableau de bord (Comptes) ---- -->
@@ -344,7 +345,7 @@
       <button id="btn-reset" class="btn-secondary" style="margin-top:4px;color:var(--danger);border-color:var(--danger)">🗑️ Réinitialiser toutes les données</button>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-logout" class="btn-secondary" style="margin-top:4px">Se déconnecter</button>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:12px">Version v37</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:12px">Version v38</p>
     </div>
   </div>
 
@@ -488,6 +489,117 @@
     <div class="modal-buttons">
       <button id="modal-passer-confirm" class="btn-primary">✅ Confirmer</button>
       <button id="modal-passer-cancel" class="btn-secondary">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Aide -->
+<div id="modal-help" class="modal hidden">
+  <div class="modal-content" style="max-height:85vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">Aide — Finances Perso NC</h3>
+      <button id="btn-help-close" style="background:none;border:none;font-size:1.3rem;cursor:pointer">✕</button>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Comptes
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Comptes</b> affiche le solde de chaque compte au dernier jour du mois en cours.</p>
+        <p>Cliquez sur un compte pour voir ses opérations mois par mois avec le solde après chaque opération.</p>
+        <p>Naviguez entre les mois avec les flèches ◀ ▶. Les mois futurs affichent les opérations programmées.</p>
+        <p>La carte à débit différé 💳 affiche en plus le prochain prélèvement, l'encours 30 jours et le plafond restant.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Projection
+      </button>
+      <div class="help-body hidden">
+        <p>La section <b>Projection</b> (bouton 📈) simule l'évolution de vos soldes sur les mois à venir.</p>
+        <p><b>Compte</b> : choisissez un compte ou "Tous les comptes" pour voir le récapitulatif.</p>
+        <p><b>Horizon</b> : 6 mois, 1 an, 2 ans ou 5 ans.</p>
+        <p><b>Jour</b> : laissez vide pour le solde en fin de mois, ou saisissez un jour (ex: 25) pour calculer le solde du 26 du mois précédent au 25 du mois en cours.</p>
+        <p>Le graphique montre le solde à chaque période. Avec "Tous les comptes", un tableau détaille le solde de chaque compte.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Opérations
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Opérations</b> liste toutes les opérations avec filtres : compte, type, catégorie, recherche par libellé, et plage de dates.</p>
+        <p>Cliquez sur une opération pour la <b>modifier</b> ou la <b>supprimer</b>.</p>
+        <p>Vous pouvez convertir une opération en <b>virement</b> : choisissez "Virement" dans le type et sélectionnez le compte destination.</p>
+        <p>Le bouton 🖨️ permet d'imprimer la liste affichée.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Dépense / Virement
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Dépense</b> permet de saisir rapidement :</p>
+        <p><b>💳 Dépense / Revenu</b> : créez un débit ou un crédit sur un compte.</p>
+        <p><b>🔄 Virement</b> : transférez de l'argent entre deux comptes. L'app crée automatiquement le débit sur la source et le crédit sur la destination.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Programmées
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Programmées</b> gère les opérations récurrentes (loyer, salaire, prélèvements…).</p>
+        <p><b>Créer</b> : bouton ➕, choisissez la fréquence (mensuelle, trimestrielle, annuelle, ponctuelle) et la date de prochaine échéance.</p>
+        <p><b>Date de fin</b> : optionnelle, l'opération disparaît des projections après cette date.</p>
+        <p><b>Virement programmé</b> : choisissez "Virement" dans le type pour créer un transfert récurrent entre comptes.</p>
+        <p><b>✅ Passer</b> : convertit l'échéance en opération réelle. Vous pouvez modifier le montant pour ce mois uniquement. La prochaine échéance avance automatiquement.</p>
+        <p><b>✏️ Modif.</b> : modifiez le montant, la fréquence ou le compte pour toutes les échéances futures.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Statistiques
+      </button>
+      <div class="help-body hidden">
+        <p>La section <b>Statistiques</b> dans Comptes affiche pour le mois sélectionné :</p>
+        <p>• Les <b>revenus</b> et <b>dépenses</b> totaux et le solde net.</p>
+        <p>• Les <b>top catégories</b> de dépenses avec barres de progression.</p>
+        <p>Naviguez entre les mois avec ◀ ▶ et filtrez par compte.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Paramètres
+      </button>
+      <div class="help-body hidden">
+        <p><b>Gestion des comptes</b> : créer, renommer ou supprimer un compte.</p>
+        <p><b>Comptes inclus dans le solde total</b> : décochez un compte pour l'exclure du solde affiché en haut.</p>
+        <p><b>Carte à débit différé</b> : configurez le jour de remise à zéro et le plafond pour une carte bancaire.</p>
+        <p><b>Synchronisation Drive</b> : ⬆️ envoyer vos données vers Google Drive, ⬇️ les récupérer. La synchronisation ne se fait pas automatiquement — c'est vous qui décidez.</p>
+        <p><b>Sauvegardes</b> : l'app sauvegarde automatiquement à chaque ouverture (5 dernières conservées). Téléchargez une sauvegarde ou restaurez depuis un fichier.</p>
+        <p><b>Mot de passe</b> : protégez l'accès à l'application. Synchronisé via Drive entre tous vos appareils.</p>
+        <p><b>Installer l'app</b> : ajoutez l'icône sur votre écran d'accueil pour un accès rapide et le mode hors ligne.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Mode hors ligne
+      </button>
+      <div class="help-body hidden">
+        <p>L'application fonctionne <b>sans connexion internet</b> une fois installée.</p>
+        <p>Toutes vos modifications sont sauvegardées localement sur l'appareil.</p>
+        <p>Quand vous retrouvez la connexion, synchronisez via Paramètres pour mettre à jour Google Drive.</p>
+        <p>Si vous utilisez l'app sur plusieurs appareils, la version la plus récente est conservée lors de la synchronisation.</p>
+      </div>
     </div>
   </div>
 </div>
