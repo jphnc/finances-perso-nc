@@ -80,15 +80,9 @@ document.getElementById('btn-unlock').addEventListener('click', async () => {
     } else {
       showScreen('screen-login');
     }
-    // Sync Drive silencieuse
-    const waitG = setInterval(() => {
-      if (typeof google !== 'undefined' && google.accounts) {
-        clearInterval(waitG);
-        initGoogleAuth();
-        const saved = localStorage.getItem('gToken');
-        if (saved) tokenClient.requestAccessToken({ prompt: '' });
-      }
-    }, 200);
+    // Lancer la sync Google après déverrouillage (seulement si déjà connecté)
+    if (typeof google !== 'undefined' && google.accounts && !tokenClient) initGoogleAuth();
+    if (tokenClient && localStorage.getItem('gToken')) tokenClient.requestAccessToken({ prompt: '' });
   } else {
     document.getElementById('lock-error').textContent = 'Mot de passe incorrect';
     document.getElementById('lock-error').classList.remove('hidden');
@@ -172,18 +166,8 @@ function initGoogleAuth() {
   });
 }
 let unlocked = false;
-let authAttempt = 0;
 function onTokenReceived(resp) {
-  if (resp.error) {
-    authAttempt++;
-    if (authAttempt === 1) {
-      // 2e essai : popup avec choix de compte (une seule fois)
-      tokenClient.requestAccessToken({ prompt: 'select_account' });
-    }
-    // Au-delà de 2 essais, on arrête — l'utilisateur peut sync manuellement
-    return;
-  }
-  authAttempt = 0;
+  if (resp.error) return;
   accessToken = resp.access_token;
   localStorage.setItem('gToken', accessToken);
   syncFromDrive();
@@ -270,12 +254,14 @@ window.addEventListener('load', () => {
   checkInstallState();
 
   if (locked) return;
+  // Initialiser Google sans lancer de popup — la sync se fera via les boutons
   const waitGoogle = setInterval(() => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
       initGoogleAuth();
-      // Essai silencieux d'abord, popup seulement si échec (via onTokenReceived)
-      tokenClient.requestAccessToken({ prompt: '' });
+      // Sur mobile, prompt:'' affiche quand même un popup → ne lancer que si on a déjà un token
+      const saved = localStorage.getItem('gToken');
+      if (saved) tokenClient.requestAccessToken({ prompt: '' });
     }
   }, 200);
 });
@@ -288,7 +274,7 @@ async function driveRequest(method, url, body = null) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(url, opts);
-  if (res.status === 401) { tokenClient.requestAccessToken({ prompt: '' }); throw new Error('Token expiré'); }
+  if (res.status === 401) { accessToken = null; throw new Error('Token expiré — resynchronisez depuis Paramètres'); }
   return res;
 }
 async function findOrCreateFile() {
