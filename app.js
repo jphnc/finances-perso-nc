@@ -1188,6 +1188,29 @@ document.getElementById('backup-file-input').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+// ── MISE À JOUR ─────────────────────────────────────────────────────────────
+document.getElementById('btn-check-update').addEventListener('click', async () => {
+  const statusEl = document.getElementById('update-status');
+  statusEl.textContent = '⏳ Recherche de mises à jour...';
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) {
+      await reg.update();
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        statusEl.textContent = '✅ Nouvelle version trouvée — rechargement...';
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        statusEl.textContent = '✅ Vous avez la dernière version';
+      }
+    } else {
+      statusEl.textContent = '⚠️ Service worker non trouvé';
+    }
+  } catch (e) {
+    statusEl.textContent = '❌ ' + e.message;
+  }
+});
+
 // ── AIDE ────────────────────────────────────────────────────────────────────
 document.getElementById('btn-help').addEventListener('click', () => {
   document.getElementById('modal-help').classList.remove('hidden');
