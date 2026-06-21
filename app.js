@@ -112,8 +112,16 @@ document.getElementById('btn-pwd-set').addEventListener('click', async () => {
   document.getElementById('cfg-pwd-new').value = '';
   document.getElementById('cfg-pwd-confirm').value = '';
   updatePwdStatus();
-  toast('🔒 Mot de passe défini');
-  if (accessToken) uploadToDrive().catch(() => {});
+  if (accessToken) {
+    try {
+      await uploadToDrive();
+      toast('🔒 Mot de passe enregistré ET synchronisé sur Drive');
+    } catch (e) {
+      toast('🔒 Enregistré localement, mais erreur Drive : ' + e.message);
+    }
+  } else {
+    toast('🔒 Enregistré localement — connectez-vous à Drive (🔄) pour le synchroniser');
+  }
 });
 
 document.getElementById('btn-pwd-remove').addEventListener('click', () => {
@@ -127,10 +135,14 @@ document.getElementById('btn-pwd-remove').addEventListener('click', () => {
 });
 
 function updatePwdStatus() {
-  const has = !!getPwdHash();
-  document.getElementById('pwd-status').innerHTML = has
-    ? '<span style="color:var(--accent)">🔒 Mot de passe actif</span>'
-    : '<span style="color:var(--muted)">🔓 Aucun mot de passe</span>';
+  const localPwd = !!localStorage.getItem('finances_pwd');
+  const drivePwd = !!(appData && appData.pwdHash);
+  const has = localPwd || drivePwd;
+  const driveCon = accessToken ? '✅ connecté' : '❌ non connecté';
+  document.getElementById('pwd-status').innerHTML = `
+    <div>Drive : ${driveCon}</div>
+    <div>Mot de passe local : ${localPwd ? '✅' : '❌'}</div>
+    <div>Mot de passe sur Drive : ${drivePwd ? '✅' : '❌ (pas encore synchronisé)'}</div>`;
   document.getElementById('btn-pwd-remove').style.display = has ? '' : 'none';
 }
 
