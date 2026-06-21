@@ -147,7 +147,14 @@ function updatePwdStatus() {
 }
 
 // ── STOCKAGE LOCAL ───────────────────────────────────────────────────────────
-function saveLocal() {
+// touch=true (défaut) → horodate la version des données (modification utilisateur)
+// touch=false → conserve l'horodatage existant (ex: après téléchargement depuis Drive)
+function saveLocal(touch = true) {
+  if (touch) {
+    const now = new Date();
+    appData.lastSync = now.toISOString();
+    appData.lastSyncLocal = now.toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  }
   localStorage.setItem('finances_data', JSON.stringify(appData));
 }
 function loadLocal() {
@@ -182,6 +189,18 @@ function onTokenReceived(resp) {
 document.getElementById('btn-login').addEventListener('click', () => {
   if (!tokenClient) { toast('Google API pas encore chargée, patientez…'); return; }
   tokenClient.requestAccessToken({ prompt: '' });
+});
+
+// Re-synchronise automatiquement quand la connexion revient
+window.addEventListener('online', () => {
+  toast('🌐 Connexion rétablie — synchronisation…');
+  if (accessToken) syncFromDrive();
+  else if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
+  updateSyncStatus();
+});
+window.addEventListener('offline', () => {
+  toast('📴 Hors ligne — vos modifications sont sauvegardées localement');
+  updateSyncStatus();
 });
 document.getElementById('btn-skip-login').addEventListener('click', () => {
   showScreen('screen-main');
@@ -243,15 +262,13 @@ async function downloadFromDrive() {
 }
 async function uploadToDrive() {
   if (!driveFileId) await findOrCreateFile();
+  // On envoie appData tel quel — son horodatage = date de dernière modification.
   await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
     method: 'PATCH',
     headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
     body: JSON.stringify(appData, null, 2),
   });
-  const now = new Date();
-  appData.lastSync = now.toISOString();
-  appData.lastSyncLocal = now.toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  saveLocal();
+  localStorage.setItem('finances_lastdrive', new Date().toISOString());
   updateSyncStatus();
 }
 async function syncFromDrive() {
@@ -261,13 +278,15 @@ async function syncFromDrive() {
     if (remote) {
       const localTime = appData.lastSync ? new Date(appData.lastSync).getTime() : 0;
       const remoteTime = remote.lastSync ? new Date(remote.lastSync).getTime() : 0;
-      if (remoteTime >= localTime || !appData.operations.length) {
+      if (remoteTime > localTime || !appData.operations.length) {
         appData = remote;
-        saveLocal();
+        saveLocal(false);
         toast('✅ Données récupérées depuis Drive');
-      } else {
+      } else if (localTime > remoteTime) {
         await uploadToDrive();
-        toast('✅ Données locales envoyées vers Drive');
+        toast('✅ Modifications locales envoyées vers Drive');
+      } else {
+        // Mêmes données, rien à faire
       }
     } else {
       await uploadToDrive();
@@ -291,7 +310,8 @@ function updateSyncStatus() {
   const ls = document.getElementById('display-lastsync');
   if (appData.lastSync) {
     const str = appData.lastSyncLocal || new Date(appData.lastSync).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
-    el.textContent = '✅ Sync ' + str;
+    const online = navigator.onLine ? '' : ' (hors ligne)';
+    el.textContent = '📊 Données du ' + str + online;
     if (ls) ls.textContent = str;
   }
 }
@@ -772,6 +792,7 @@ document.getElementById('btn-force-upload').addEventListener('click', async () =
   }
   try {
     document.getElementById('sync-detail').textContent = '⏳ Envoi en cours...';
+    saveLocal(true); // horodate maintenant pour que cette version gagne partout
     await uploadToDrive();
     document.getElementById('sync-detail').textContent = '✅ Données envoyées vers Drive à ' + new Date().toLocaleTimeString('fr-FR');
     toast('✅ Données envoyées vers Drive');
@@ -790,7 +811,7 @@ document.getElementById('btn-force-download').addEventListener('click', async ()
     const remote = await downloadFromDrive();
     if (remote) {
       appData = remote;
-      saveLocal();
+      saveLocal(false);
       renderAll();
       document.getElementById('sync-detail').textContent = '✅ Données récupérées de Drive — ' + (appData.operations || []).length + ' opérations';
       toast('✅ Données récupérées');
