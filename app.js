@@ -80,9 +80,8 @@ document.getElementById('btn-unlock').addEventListener('click', async () => {
     } else {
       showScreen('screen-login');
     }
-    // Lancer la sync Google après déverrouillage (seulement si déjà connecté)
+    // Initialiser Google sans popup — la sync se fait via les boutons
     if (typeof google !== 'undefined' && google.accounts && !tokenClient) initGoogleAuth();
-    if (tokenClient && localStorage.getItem('gToken')) tokenClient.requestAccessToken({ prompt: '' });
   } else {
     document.getElementById('lock-error').textContent = 'Mot de passe incorrect';
     document.getElementById('lock-error').classList.remove('hidden');
@@ -225,9 +224,8 @@ function checkInstallState() {
 
 // Re-synchronise automatiquement quand la connexion revient
 window.addEventListener('online', () => {
-  toast('🌐 Connexion rétablie — synchronisation…');
+  toast('🌐 Connexion rétablie');
   if (accessToken) syncFromDrive();
-  else if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
   updateSyncStatus();
 });
 window.addEventListener('offline', () => {
@@ -254,14 +252,11 @@ window.addEventListener('load', () => {
   checkInstallState();
 
   if (locked) return;
-  // Initialiser Google sans lancer de popup — la sync se fera via les boutons
+  // Initialiser Google sans popup — la sync se fait via les boutons dans Paramètres
   const waitGoogle = setInterval(() => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
       initGoogleAuth();
-      // Sur mobile, prompt:'' affiche quand même un popup → ne lancer que si on a déjà un token
-      const saved = localStorage.getItem('gToken');
-      if (saved) tokenClient.requestAccessToken({ prompt: '' });
     }
   }, 200);
 });
