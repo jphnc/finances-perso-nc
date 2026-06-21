@@ -745,6 +745,37 @@ document.getElementById('btn-sync').addEventListener('click', () => {
   syncFromDrive();
 });
 
+document.getElementById('btn-force-upload').addEventListener('click', async () => {
+  if (!accessToken) { toast('⚠️ Connectez-vous à Google d\'abord (bouton 🔄)'); return; }
+  try {
+    document.getElementById('sync-detail').textContent = '⏳ Envoi en cours...';
+    await uploadToDrive();
+    document.getElementById('sync-detail').textContent = '✅ Données envoyées vers Drive à ' + new Date().toLocaleTimeString('fr-FR');
+    toast('✅ Données envoyées vers Drive');
+  } catch (e) {
+    document.getElementById('sync-detail').textContent = '❌ ' + e.message;
+  }
+});
+
+document.getElementById('btn-force-download').addEventListener('click', async () => {
+  if (!accessToken) { toast('⚠️ Connectez-vous à Google d\'abord (bouton 🔄)'); return; }
+  try {
+    document.getElementById('sync-detail').textContent = '⏳ Téléchargement...';
+    const remote = await downloadFromDrive();
+    if (remote) {
+      appData = remote;
+      saveLocal();
+      renderAll();
+      document.getElementById('sync-detail').textContent = '✅ Données récupérées de Drive — ' + (appData.operations || []).length + ' opérations';
+      toast('✅ Données récupérées');
+    } else {
+      document.getElementById('sync-detail').textContent = '⚠️ Aucune donnée sur Drive';
+    }
+  } catch (e) {
+    document.getElementById('sync-detail').textContent = '❌ ' + e.message;
+  }
+});
+
 // ── CONFIG COMPTES SOLDE TOTAL ───────────────────────────────────────────────
 function populateTotalAccountsConfig() {
   const container = document.getElementById('cfg-total-accounts');

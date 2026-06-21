@@ -299,6 +299,13 @@
       </label>
       <button id="btn-save-card-cfg" class="btn-primary" style="background:var(--accent)">💾 Enregistrer la config carte</button>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Synchronisation Drive</p>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button id="btn-force-upload" class="btn-primary" style="flex:1;background:var(--accent)">⬆️ Envoyer vers Drive</button>
+        <button id="btn-force-download" class="btn-secondary" style="flex:1">⬇️ Récupérer de Drive</button>
+      </div>
+      <div id="sync-detail" style="font-size:0.78rem;color:var(--muted);margin-bottom:8px"></div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Import données existantes</p>
       <button id="btn-import-bdu" class="btn-primary" style="background:var(--accent)">📂 Importer comptes_data.json</button>
       <div id="import-status" class="hidden" style="font-size:0.8rem;color:var(--accent);margin-top:8px;text-align:center"></div>
