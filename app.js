@@ -191,6 +191,52 @@ document.getElementById('btn-login').addEventListener('click', () => {
   tokenClient.requestAccessToken({ prompt: '' });
 });
 
+// ── INSTALLATION DE L'APP (PWA) ──────────────────────────────────────────────
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('btn-install-app');
+  if (btn) btn.classList.remove('hidden');
+});
+
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('btn-install-app');
+  if (btn) btn.classList.add('hidden');
+  toast('✅ Application installée !');
+});
+
+document.getElementById('btn-install-app').addEventListener('click', async () => {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') toast('✅ Installation lancée');
+    deferredInstallPrompt = null;
+    document.getElementById('btn-install-app').classList.add('hidden');
+  }
+});
+
+function checkInstallState() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const btn = document.getElementById('btn-install-app');
+  const hint = document.getElementById('install-hint');
+  if (isStandalone) {
+    // Déjà installée : ne rien afficher
+    return;
+  }
+  if (isIOS) {
+    // iOS Safari ne supporte pas beforeinstallprompt : montrer les instructions
+    btn.classList.add('hidden');
+    hint.classList.remove('hidden');
+    hint.innerHTML = '📲 <b>Installer sur iPhone</b> : touchez le bouton Partager (⬆️) en bas de Safari, puis « Sur l\'écran d\'accueil ».';
+  } else if (!deferredInstallPrompt) {
+    // Android : si le navigateur n'a pas encore proposé, donner l'astuce manuelle
+    hint.classList.remove('hidden');
+    hint.innerHTML = '📲 <b>Installer</b> : ouvrez le menu ⋮ du navigateur (en haut ou en bas à droite) puis « Installer l\'application » ou « Ajouter à l\'écran d\'accueil ».';
+  }
+}
+
 // Re-synchronise automatiquement quand la connexion revient
 window.addEventListener('online', () => {
   toast('🌐 Connexion rétablie — synchronisation…');
@@ -219,6 +265,7 @@ window.addEventListener('load', () => {
   }
   setDefaultDate();
   updatePwdStatus();
+  checkInstallState();
 
   if (locked) return;
   const waitGoogle = setInterval(() => {
