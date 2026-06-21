@@ -1265,9 +1265,11 @@ function scheduledOpsInMonth(year, month, accountFilter) {
   return result;
 }
 
-// Calcul du solde à la fin d'un mois donné (ops réelles + programmées pour les mois futurs)
-function calcBalanceEndOfMonth(accountFilter, year, month) {
-  const mEnd = `${year}-${String(month+1).padStart(2,'0')}-31`;
+// Calcul du solde à une date donnée d'un mois (ops réelles + programmées pour les mois futurs)
+// cutDay = 0 → fin de mois, sinon jour précis (1-31)
+function calcBalanceAtDate(accountFilter, year, month, cutDay) {
+  const day = cutDay || new Date(year, month + 1, 0).getDate(); // 0 = dernier jour du mois
+  const mCut = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
   const now = new Date();
   const currentMonth = now.getFullYear() * 12 + now.getMonth();
   const targetMonth = year * 12 + month;
@@ -1276,20 +1278,28 @@ function calcBalanceEndOfMonth(accountFilter, year, month) {
     const acc = appData.accounts.find(a => a.name === accountFilter);
     const initial = acc ? (acc.initialBalance || 0) : 0;
     const realOps = appData.operations.filter(op =>
-      op.account === accountFilter && op.opType !== 'Programmee' && op.date <= mEnd);
+      op.account === accountFilter && op.opType !== 'Programmee' && op.date <= mCut);
     let bal = initial + realOps.reduce((s, op) =>
       op.type === 'credit' ? s + op.amount : s - op.amount, 0);
-    // Ajouter les ops programmées pour chaque mois futur jusqu'au mois cible
     for (let m = currentMonth + 1; m <= targetMonth; m++) {
       const schOps = scheduledOpsInMonth(Math.floor(m/12), m%12, accountFilter);
-      bal += schOps.reduce((s, op) => op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+      // Si cutDay > 0, ne compter que les ops programmées dont le jour <= cutDay
+      const filtered = cutDay ? schOps.filter(op => {
+        const opDay = parseInt((op.nextPayment || op.date).split('-')[2]);
+        return opDay <= cutDay;
+      }) : schOps;
+      bal += filtered.reduce((s, op) => op.type === 'credit' ? s + op.amount : s - op.amount, 0);
     }
     return bal;
   } else {
     return appData.accounts.reduce((total, a) => {
-      return total + calcBalanceEndOfMonth(a.name, year, month);
+      return total + calcBalanceAtDate(a.name, year, month, cutDay);
     }, 0);
   }
+}
+
+function calcBalanceEndOfMonth(accountFilter, year, month) {
+  return calcBalanceAtDate(accountFilter, year, month, 0);
 }
 
 // Opérations d'un mois donné (réelles + programmées si futur)
@@ -1351,16 +1361,17 @@ function renderProjection() {
   const horizonMonths = parseInt(document.getElementById('proj-horizon').value);
   const { startBalance, points, opLines } = calcProjection(accountFilter, horizonMonths);
 
-  // Graphique : solde fin de mois (barres + courbe + valeurs)
+  // Graphique : solde par mois (barres + courbe + valeurs)
+  const cutDay = parseInt(document.getElementById('proj-cutday').value) || 0;
+  const cutLabel = cutDay ? `au ${cutDay}` : 'fin de mois';
   const fmtK = v => { const a = Math.abs(v); return (v<0?'-':'') + (a >= 1000000 ? (a/1000000).toFixed(1)+'M' : a >= 1000 ? Math.round(a/1000)+'k' : a); };
   const fmtN0 = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
 
-  // Calcul du solde fin de chaque mois (startBalance = fin du mois courant)
   const now2 = new Date();
-  const endBalances = [{ label: 'actuel', balance: startBalance }];
+  const endBalances = [{ label: 'actuel', balance: calcBalanceAtDate(accountFilter, now2.getFullYear(), now2.getMonth(), cutDay) }];
   for (let i = 0; i < points.length; i++) {
     const d = new Date(now2.getFullYear(), now2.getMonth() + i + 1, 1);
-    const bal = calcBalanceEndOfMonth(accountFilter, d.getFullYear(), d.getMonth());
+    const bal = calcBalanceAtDate(accountFilter, d.getFullYear(), d.getMonth(), cutDay);
     endBalances.push({ label: points[i].label, balance: bal });
   }
 
@@ -1486,6 +1497,7 @@ document.getElementById('btn-toggle-projection').addEventListener('click', () =>
 });
 document.getElementById('proj-account').addEventListener('change', renderProjection);
 document.getElementById('proj-horizon').addEventListener('change', renderProjection);
+document.getElementById('proj-cutday').addEventListener('change', renderProjection);
 
 // ── OPÉRATIONS PROGRAMMÉES ───────────────────────────────────────────────────
 const FREQ_LABELS = {

@@ -80,15 +80,24 @@
         <button id="btn-toggle-projection" class="icon-btn">📈</button>
       </div>
       <div id="projection-panel" class="hidden">
-        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
           <select id="proj-account" style="flex:1;min-width:120px">
             <option value="">Tous les comptes</option>
           </select>
-          <select id="proj-horizon" style="flex:1;min-width:120px">
+          <select id="proj-horizon" style="flex:1;min-width:100px">
             <option value="6">6 mois</option>
             <option value="12" selected>1 an</option>
             <option value="24">2 ans</option>
             <option value="60">5 ans</option>
+          </select>
+          <select id="proj-cutday" style="flex:1;min-width:100px">
+            <option value="0">Fin de mois</option>
+            <option value="1">Le 1</option>
+            <option value="5">Le 5</option>
+            <option value="10">Le 10</option>
+            <option value="15">Le 15</option>
+            <option value="20">Le 20</option>
+            <option value="25">Le 25</option>
           </select>
         </div>
         <div id="proj-chart" style="overflow-x:auto;margin-bottom:12px"></div>
