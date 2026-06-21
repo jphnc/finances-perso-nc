@@ -149,6 +149,7 @@ function saveLocal(touch = true) {
     appData.lastSyncLocal = now.toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
   }
   localStorage.setItem('finances_data', JSON.stringify(appData));
+  if (touch && backupDirHandle) writeBackupToDir();
 }
 function loadLocal() {
   const raw = localStorage.getItem('finances_data');
@@ -222,6 +223,13 @@ function checkInstallState() {
   }
 }
 
+// Sauvegarde quand l'app se ferme ou passe en arrière-plan
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && backupDirHandle && appData.operations.length) {
+    writeBackupToDir();
+  }
+});
+
 // Re-synchronise automatiquement quand la connexion revient
 window.addEventListener('online', () => {
   toast('🌐 Connexion rétablie');
@@ -250,6 +258,7 @@ window.addEventListener('load', () => {
   setDefaultDate();
   updatePwdStatus();
   checkInstallState();
+  initBackupDir();
 
   if (locked) return;
   // Initialiser Google sans popup — la sync se fait via les boutons dans Paramètres
@@ -1218,6 +1227,133 @@ document.getElementById('btn-help').addEventListener('click', () => {
 document.getElementById('btn-help-close').addEventListener('click', () => {
   document.getElementById('modal-help').classList.add('hidden');
 });
+
+// ── SAUVEGARDE AUTO SUR DISQUE ───────────────────────────────────────────────
+let backupDirHandle = null;
+const BACKUP_DB = 'finances_backup_db';
+
+async function storeHandle(handle) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(BACKUP_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => {
+      const tx = req.result.transaction('handles', 'readwrite');
+      tx.objectStore('handles').put(handle, 'backupDir');
+      tx.oncomplete = () => resolve();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function loadHandle() {
+  return new Promise((resolve) => {
+    const req = indexedDB.open(BACKUP_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => {
+      const tx = req.result.transaction('handles', 'readonly');
+      const get = tx.objectStore('handles').get('backupDir');
+      get.onsuccess = () => resolve(get.result || null);
+      get.onerror = () => resolve(null);
+    };
+    req.onerror = () => resolve(null);
+  });
+}
+
+async function initBackupDir() {
+  const handle = await loadHandle();
+  if (handle) {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      backupDirHandle = handle;
+      updateBackupDirStatus();
+    } else {
+      updateBackupDirStatus();
+    }
+  } else {
+    updateBackupDirStatus();
+  }
+}
+
+function updateBackupDirStatus() {
+  const el = document.getElementById('backup-dir-status');
+  const clearBtn = document.getElementById('btn-backup-dir-clear');
+  if (backupDirHandle) {
+    el.textContent = `✅ Dossier : ${backupDirHandle.name} — sauvegarde auto active`;
+    el.style.color = 'var(--accent)';
+    clearBtn.classList.remove('hidden');
+  } else {
+    loadHandle().then(h => {
+      if (h) {
+        el.textContent = '⚠️ Dossier configuré mais permission expirée — recliquez "📁 Choisir"';
+        el.style.color = '#ef9f27';
+      } else {
+        el.textContent = 'Aucun dossier configuré';
+        el.style.color = 'var(--muted)';
+      }
+      clearBtn.classList.toggle('hidden', !h);
+    });
+  }
+}
+
+document.getElementById('btn-backup-dir').addEventListener('click', async () => {
+  if (!window.showDirectoryPicker) {
+    toast('⚠️ Non disponible sur ce navigateur (uniquement Chrome PC)');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    backupDirHandle = handle;
+    await storeHandle(handle);
+    updateBackupDirStatus();
+    toast('✅ Dossier de sauvegarde configuré');
+    await writeBackupToDir();
+  } catch (e) {
+    if (e.name !== 'AbortError') toast('❌ ' + e.message);
+  }
+});
+
+document.getElementById('btn-backup-dir-clear').addEventListener('click', async () => {
+  backupDirHandle = null;
+  const req = indexedDB.open(BACKUP_DB, 1);
+  req.onsuccess = () => {
+    const tx = req.result.transaction('handles', 'readwrite');
+    tx.objectStore('handles').delete('backupDir');
+  };
+  updateBackupDirStatus();
+  toast('Dossier de sauvegarde supprimé');
+});
+
+async function writeBackupToDir() {
+  if (!backupDirHandle) return;
+  try {
+    const perm = await backupDirHandle.requestPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') return;
+
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+    const fileName = `finances-backup-${stamp}.json`;
+
+    // Écrire le nouveau fichier
+    const fileHandle = await backupDirHandle.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(appData, null, 2));
+    await writable.close();
+
+    // Nettoyer : garder seulement les 5 derniers fichiers
+    const files = [];
+    for await (const [name, handle] of backupDirHandle) {
+      if (name.startsWith('finances-backup-') && name.endsWith('.json')) {
+        files.push({ name, handle });
+      }
+    }
+    files.sort((a, b) => b.name.localeCompare(a.name));
+    for (let i = 5; i < files.length; i++) {
+      await backupDirHandle.removeEntry(files[i].name);
+    }
+  } catch (e) {
+    console.error('Backup auto erreur:', e);
+  }
+}
 
 // ── RÉINITIALISATION ─────────────────────────────────────────────────────────
 document.getElementById('btn-reset').addEventListener('click', () => {
