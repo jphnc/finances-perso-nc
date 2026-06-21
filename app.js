@@ -194,7 +194,7 @@ window.addEventListener('load', () => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
       initGoogleAuth();
-      tokenClient.requestAccessToken({ prompt: '' });
+      tokenClient.requestAccessToken({ prompt: 'consent' });
     }
   }, 200);
 });
