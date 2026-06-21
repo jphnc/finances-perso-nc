@@ -238,6 +238,11 @@ async function syncFromDrive() {
     const remote = await downloadFromDrive();
     if (remote) { appData = remote; saveLocal(); }
     else await uploadToDrive();
+    if (appData.pwdHash) localStorage.setItem('finances_pwd', appData.pwdHash);
+    if (getPwdHash() && document.getElementById('screen-lock').classList.contains('screen') && !document.getElementById('screen-lock').classList.contains('active')) {
+      checkLockScreen();
+      return;
+    }
     renderAll();
     updateSyncStatus();
     toast('✅ Synchronisé avec Drive');
