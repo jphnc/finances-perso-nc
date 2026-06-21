@@ -240,8 +240,21 @@ async function syncFromDrive() {
   document.getElementById('sync-status').textContent = '⏳ Synchronisation…';
   try {
     const remote = await downloadFromDrive();
-    if (remote) { appData = remote; saveLocal(); }
-    else await uploadToDrive();
+    if (remote) {
+      const localTime = appData.lastSync ? new Date(appData.lastSync).getTime() : 0;
+      const remoteTime = remote.lastSync ? new Date(remote.lastSync).getTime() : 0;
+      if (remoteTime >= localTime || !appData.operations.length) {
+        appData = remote;
+        saveLocal();
+        toast('✅ Données récupérées depuis Drive');
+      } else {
+        await uploadToDrive();
+        toast('✅ Données locales envoyées vers Drive');
+      }
+    } else {
+      await uploadToDrive();
+      toast('✅ Données envoyées vers Drive');
+    }
     if (appData.pwdHash) localStorage.setItem('finances_pwd', appData.pwdHash);
     if (getPwdHash() && !unlocked) {
       checkLockScreen();
@@ -250,7 +263,6 @@ async function syncFromDrive() {
     renderAll();
     showScreen('screen-main');
     updateSyncStatus();
-    toast('✅ Synchronisé avec Drive');
   } catch (e) {
     toast('⚠️ ' + e.message);
     document.getElementById('sync-status').textContent = '⚠️ Erreur sync';
