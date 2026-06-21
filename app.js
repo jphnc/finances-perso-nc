@@ -1388,7 +1388,7 @@ function renderProjection() {
 
   // Calcul des soldes par mois
   const cutDay = parseInt(document.getElementById('proj-cutday').value) || 0;
-  const fmtK = v => { const a = Math.abs(v); return (v<0?'-':'') + (a >= 1000000 ? (a/1000000).toFixed(1)+'M' : a >= 1000 ? Math.round(a/1000)+'k' : a); };
+  const fmtK = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
   const fmtN0 = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
 
   const now2 = new Date();
