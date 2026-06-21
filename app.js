@@ -69,6 +69,7 @@ document.getElementById('btn-unlock').addEventListener('click', async () => {
   const hash = await hashPassword(pwd);
   const stored = getPwdHash();
   if (hash === stored) {
+    unlocked = true;
     document.getElementById('lock-password').value = '';
     document.getElementById('lock-error').classList.add('hidden');
     const hasData = loadLocal();
@@ -151,11 +152,11 @@ function initGoogleAuth() {
     callback: onTokenReceived,
   });
 }
+let unlocked = false;
 function onTokenReceived(resp) {
   if (resp.error) { toast('Erreur auth : ' + resp.error); return; }
   accessToken = resp.access_token;
   localStorage.setItem('gToken', accessToken);
-  showScreen('screen-main');
   syncFromDrive();
 }
 document.getElementById('btn-login').addEventListener('click', () => {
@@ -169,10 +170,13 @@ document.getElementById('btn-skip-login').addEventListener('click', () => {
 window.addEventListener('load', () => {
   const hasData = loadLocal();
   const locked = checkLockScreen();
-  if (!locked && hasData) {
-    autoBackup();
-    renderAll();
-    showScreen('screen-main');
+  if (!locked) {
+    unlocked = true;
+    if (hasData) {
+      autoBackup();
+      renderAll();
+      showScreen('screen-main');
+    }
   }
   setDefaultDate();
   updatePwdStatus();
@@ -239,11 +243,12 @@ async function syncFromDrive() {
     if (remote) { appData = remote; saveLocal(); }
     else await uploadToDrive();
     if (appData.pwdHash) localStorage.setItem('finances_pwd', appData.pwdHash);
-    if (getPwdHash() && document.getElementById('screen-lock').classList.contains('screen') && !document.getElementById('screen-lock').classList.contains('active')) {
+    if (getPwdHash() && !unlocked) {
       checkLockScreen();
       return;
     }
     renderAll();
+    showScreen('screen-main');
     updateSyncStatus();
     toast('✅ Synchronisé avec Drive');
   } catch (e) {
