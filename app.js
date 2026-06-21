@@ -553,13 +553,14 @@ function renderOperations() {
   if (search)     ops = ops.filter(op => op.label.toLowerCase().includes(search));
 
   if (useMonthView) {
-    // Solde de début de mois = solde fin du mois précédent
-    const prevMonth = opsMonth === 0 ? 11 : opsMonth - 1;
-    const prevYear = opsMonth === 0 ? opsYear - 1 : opsYear;
-    const balanceStart = calcBalanceEndOfMonth(accFilter, prevYear, prevMonth);
-
-    // Opérations du mois (réelles + programmées si futur)
+    // Solde de fin de mois = calcul direct (même fonction que la projection)
+    const endOfMonthBal = calcBalanceEndOfMonth(accFilter, opsYear, opsMonth);
+    // Opérations du mois
     const monthOps = getMonthOps(accFilter, opsYear, opsMonth);
+    // Solde de début = solde fin - delta des ops du mois
+    const monthDelta = monthOps.reduce((s, op) =>
+      op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+    const balanceStart = endOfMonthBal - monthDelta;
 
     // Afficher solde début de mois
     const fmtN = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
