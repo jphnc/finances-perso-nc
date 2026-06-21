@@ -186,11 +186,7 @@ window.addEventListener('load', () => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
       initGoogleAuth();
-      const saved = localStorage.getItem('gToken');
-      if (saved) {
-        // Sync silencieuse en arrière-plan
-        tokenClient.requestAccessToken({ prompt: '' });
-      }
+      tokenClient.requestAccessToken({ prompt: '' });
     }
   }, 200);
 });
