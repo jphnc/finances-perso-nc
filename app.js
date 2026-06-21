@@ -1315,9 +1315,11 @@ function calcBalanceAtDate(accountFilter, year, month, cutDay) {
     }
     return bal;
   } else {
-    return appData.accounts.reduce((total, a) => {
-      return total + calcBalanceAtDate(a.name, year, month, cutDay);
-    }, 0);
+    return appData.accounts
+      .filter(a => a.includeInTotal !== false)
+      .reduce((total, a) => {
+        return total + calcBalanceAtDate(a.name, year, month, cutDay);
+      }, 0);
   }
 }
 
