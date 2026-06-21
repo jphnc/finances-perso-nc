@@ -50,9 +50,12 @@ async function hashPassword(pwd) {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function getPwdHash() {
+  return (appData && appData.pwdHash) || localStorage.getItem('finances_pwd') || null;
+}
+
 function checkLockScreen() {
-  const pwdHash = localStorage.getItem('finances_pwd');
-  if (pwdHash) {
+  if (getPwdHash()) {
     showScreen('screen-lock');
     document.getElementById('lock-password').focus();
     return true;
@@ -64,7 +67,7 @@ document.getElementById('btn-unlock').addEventListener('click', async () => {
   const pwd = document.getElementById('lock-password').value;
   if (!pwd) return;
   const hash = await hashPassword(pwd);
-  const stored = localStorage.getItem('finances_pwd');
+  const stored = getPwdHash();
   if (hash === stored) {
     document.getElementById('lock-password').value = '';
     document.getElementById('lock-error').classList.add('hidden');
@@ -102,22 +105,28 @@ document.getElementById('btn-pwd-set').addEventListener('click', async () => {
   if (pwd !== confirm) { toast('⚠️ Les mots de passe ne correspondent pas'); return; }
   if (pwd.length < 4) { toast('⚠️ Minimum 4 caractères'); return; }
   const hash = await hashPassword(pwd);
+  appData.pwdHash = hash;
   localStorage.setItem('finances_pwd', hash);
+  saveLocal();
   document.getElementById('cfg-pwd-new').value = '';
   document.getElementById('cfg-pwd-confirm').value = '';
   updatePwdStatus();
   toast('🔒 Mot de passe défini');
+  if (accessToken) uploadToDrive().catch(() => {});
 });
 
 document.getElementById('btn-pwd-remove').addEventListener('click', () => {
   if (!confirm('Supprimer le mot de passe ?')) return;
+  delete appData.pwdHash;
   localStorage.removeItem('finances_pwd');
+  saveLocal();
   updatePwdStatus();
   toast('🔓 Mot de passe supprimé');
+  if (accessToken) uploadToDrive().catch(() => {});
 });
 
 function updatePwdStatus() {
-  const has = !!localStorage.getItem('finances_pwd');
+  const has = !!getPwdHash();
   document.getElementById('pwd-status').innerHTML = has
     ? '<span style="color:var(--accent)">🔒 Mot de passe actif</span>'
     : '<span style="color:var(--muted)">🔓 Aucun mot de passe</span>';
