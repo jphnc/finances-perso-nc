@@ -635,6 +635,7 @@ function renderAll() {
   document.getElementById('display-email').textContent = localStorage.getItem('userEmail') || '—';
   updateSyncStatus();
   renderBackupList();
+  renderAccountsConfig();
   updatePwdStatus();
   populateTotalAccountsConfig();
   populateCardConfig();
@@ -838,6 +839,64 @@ document.getElementById('btn-force-download').addEventListener('click', async ()
   } catch (e) {
     document.getElementById('sync-detail').textContent = '❌ ' + e.message;
   }
+});
+
+// ── GESTION DES COMPTES ─────────────────────────────────────────────────────
+function renderAccountsConfig() {
+  const names = getAccountNames();
+  const container = document.getElementById('cfg-accounts-list');
+  container.innerHTML = names.map(name => {
+    const ops = appData.operations.filter(op => op.account === name).length;
+    return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="flex:1;font-size:0.9rem;font-weight:600">${name}</span>
+      <span style="font-size:0.75rem;color:var(--muted)">${ops} ops</span>
+      <button onclick="renameAccount('${name.replace(/'/g, "\\'")}')" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer">✏️</button>
+      <button onclick="deleteAccount('${name.replace(/'/g, "\\'")}')" style="padding:4px 8px;border:1px solid var(--danger);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer;color:var(--danger)">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+window.renameAccount = function(oldName) {
+  const newName = prompt(`Renommer "${oldName}" en :`, oldName);
+  if (!newName || newName === oldName) return;
+  const existing = appData.accounts.find(a => a.name === newName);
+  if (existing) { toast('⚠️ Ce nom de compte existe déjà'); return; }
+  const acc = appData.accounts.find(a => a.name === oldName);
+  if (acc) acc.name = newName;
+  appData.operations.forEach(op => {
+    if (op.account === oldName) op.account = newName;
+    // Mettre à jour les libellés de virement [oldName]
+    if (op.label === `[${oldName}]`) op.label = `[${newName}]`;
+    if (op.virementDest === oldName) op.virementDest = newName;
+  });
+  saveLocal();
+  renderAll();
+  toast(`✅ Compte renommé : ${oldName} → ${newName}`);
+  if (accessToken) uploadToDrive().catch(() => {});
+};
+
+window.deleteAccount = function(name) {
+  const ops = appData.operations.filter(op => op.account === name).length;
+  if (!confirm(`Supprimer le compte "${name}" et ses ${ops} opérations ?\n\nCette action est irréversible.`)) return;
+  appData.accounts = appData.accounts.filter(a => a.name !== name);
+  appData.operations = appData.operations.filter(op => op.account !== name);
+  saveLocal();
+  renderAll();
+  toast(`🗑 Compte "${name}" supprimé`);
+  if (accessToken) uploadToDrive().catch(() => {});
+};
+
+document.getElementById('btn-add-account').addEventListener('click', () => {
+  const name = document.getElementById('cfg-new-account').value.trim();
+  if (!name) { toast('⚠️ Nom requis'); return; }
+  const existing = appData.accounts.find(a => a.name === name);
+  if (existing) { toast('⚠️ Ce nom existe déjà'); return; }
+  appData.accounts.push({ id: appData.accounts.length + 1, name, initialBalance: 0 });
+  document.getElementById('cfg-new-account').value = '';
+  saveLocal();
+  renderAll();
+  toast(`✅ Compte "${name}" créé`);
+  if (accessToken) uploadToDrive().catch(() => {});
 });
 
 // ── CONFIG COMPTES SOLDE TOTAL ───────────────────────────────────────────────
