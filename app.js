@@ -172,16 +172,18 @@ function initGoogleAuth() {
   });
 }
 let unlocked = false;
-let authRetried = false;
+let authAttempt = 0;
 function onTokenReceived(resp) {
   if (resp.error) {
-    if (!authRetried) {
-      authRetried = true;
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+    authAttempt++;
+    if (authAttempt === 1) {
+      // 2e essai : popup avec choix de compte (une seule fois)
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
     }
+    // Au-delà de 2 essais, on arrête — l'utilisateur peut sync manuellement
     return;
   }
-  authRetried = false;
+  authAttempt = 0;
   accessToken = resp.access_token;
   localStorage.setItem('gToken', accessToken);
   syncFromDrive();
@@ -272,7 +274,8 @@ window.addEventListener('load', () => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
       initGoogleAuth();
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      // Essai silencieux d'abord, popup seulement si échec (via onTokenReceived)
+      tokenClient.requestAccessToken({ prompt: '' });
     }
   }, 200);
 });
