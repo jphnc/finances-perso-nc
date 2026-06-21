@@ -1397,20 +1397,16 @@ function renderProjection() {
     const bal = calcBalanceAtDate(accountFilter, d.getFullYear(), d.getMonth(), cutDay);
     let lbl = points[i].label;
     if (cutDay && cutDay > 0 && cutDay < 31) {
-      // Afficher la période : du (jour+1) mois précédent au (jour) mois courant
-      const prevD = new Date(d.getFullYear(), d.getMonth() - 1, 1);
-      const fromDay = cutDay + 1;
-      const fromMonth = prevD.toLocaleDateString('fr-FR', { month: 'short' });
-      const toMonth = d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
-      lbl = `${fromDay}/${fromMonth}-${cutDay}/${toMonth}`;
+      const mShort = d.toLocaleDateString('fr-FR', { month: 'short' });
+      lbl = `${cutDay} ${mShort}`;
     }
     endBalances.push({ label: lbl, balance: bal });
   }
 
   const n = endBalances.length;
   const W = Math.max(400, n * 55);
-  const H = 220;
-  const pad = { top: 30, right: 15, bottom: 45, left: 70 };
+  const H = 240;
+  const pad = { top: 30, right: 15, bottom: 60, left: 70 };
   const cw = W - pad.left - pad.right;
   const ch = H - pad.top - pad.bottom;
 
@@ -1455,10 +1451,11 @@ function renderProjection() {
     return `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--primary)" stroke="white" stroke-width="1.5"/>`;
   }).join('');
 
+  const skip = n > 12 ? Math.ceil(n / 12) : 1;
   const xLabels = endBalances.map((e, i) => {
+    if (i % skip !== 0 && i !== 0) return '';
     const x = pad.left + i * gap + gap / 2;
-    const show = n <= 14 || i % Math.ceil(n / 12) === 0;
-    return show ? `<text x="${x}" y="${H - pad.bottom + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">${e.label}</text>` : '';
+    return `<text x="${x}" y="${H - pad.bottom + 12}" text-anchor="end" font-size="8" fill="var(--muted)" transform="rotate(-45 ${x} ${H - pad.bottom + 12})">${e.label}</text>`;
   }).join('');
 
   const svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:300px">
