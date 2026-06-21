@@ -1351,54 +1351,78 @@ function renderProjection() {
   const horizonMonths = parseInt(document.getElementById('proj-horizon').value);
   const { startBalance, points, opLines } = calcProjection(accountFilter, horizonMonths);
 
-  // SVG Chart
-  const W = Math.max(500, horizonMonths * 42);
-  const H = 180;
-  const pad = { top: 20, right: 20, bottom: 40, left: 70 };
+  // Graphique : solde fin de mois (barres + courbe + valeurs)
+  const fmtK = v => { const a = Math.abs(v); return (v<0?'-':'') + (a >= 1000000 ? (a/1000000).toFixed(1)+'M' : a >= 1000 ? Math.round(a/1000)+'k' : a); };
+  const fmtN0 = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
+
+  // Calcul du solde fin de chaque mois (startBalance = fin du mois courant)
+  const now2 = new Date();
+  const endBalances = [{ label: 'actuel', balance: startBalance }];
+  for (let i = 0; i < points.length; i++) {
+    const d = new Date(now2.getFullYear(), now2.getMonth() + i + 1, 1);
+    const bal = calcBalanceEndOfMonth(accountFilter, d.getFullYear(), d.getMonth());
+    endBalances.push({ label: points[i].label, balance: bal });
+  }
+
+  const n = endBalances.length;
+  const W = Math.max(400, n * 55);
+  const H = 220;
+  const pad = { top: 30, right: 15, bottom: 45, left: 70 };
   const cw = W - pad.left - pad.right;
   const ch = H - pad.top - pad.bottom;
 
-  const allBalances = [startBalance, ...points.map(p => p.balance)];
-  const minB = Math.min(...allBalances);
-  const maxB = Math.max(...allBalances);
+  const allBals = endBalances.map(e => e.balance);
+  const minB = Math.min(0, ...allBals);
+  const maxB = Math.max(0, ...allBals);
   const range = maxB - minB || 1;
 
-  const xScale = (i) => pad.left + (i / (points.length)) * cw;
   const yScale = (v) => pad.top + ch - ((v - minB) / range) * ch;
+  const barW = Math.max(12, Math.min(35, (cw / n) * 0.6));
+  const gap = cw / n;
 
-  const polyPoints = [
-    `${xScale(0)},${yScale(startBalance)}`,
-    ...points.map((p, i) => `${xScale(i + 1)},${yScale(p.balance)}`)
-  ].join(' ');
-
-  // Zero line
-  const zeroY = minB <= 0 && maxB >= 0 ? yScale(0) : null;
+  const zeroY = yScale(0);
 
   const gridLines = [0, 0.25, 0.5, 0.75, 1].map(r => {
     const v = minB + r * range;
     const y = yScale(v);
-    const label = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
     return `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="var(--border)" stroke-dasharray="3,3"/>
-            <text x="${pad.left - 4}" y="${y + 4}" text-anchor="end" font-size="9" fill="var(--muted)">${label}</text>`;
+            <text x="${pad.left - 4}" y="${y + 4}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtK(v)}</text>`;
   }).join('');
 
-  const xLabels = points.map((p, i) => {
-    const x = xScale(i + 1);
-    const show = horizonMonths <= 12 || i % Math.ceil(horizonMonths / 12) === 0;
-    return show ? `<text x="${x}" y="${H - pad.bottom + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">${p.label}</text>` : '';
+  const bars = endBalances.map((e, i) => {
+    const x = pad.left + i * gap + (gap - barW) / 2;
+    const y = yScale(e.balance);
+    const h = Math.abs(y - zeroY);
+    const top = e.balance >= 0 ? y : zeroY;
+    const col = e.balance >= 0 ? '#43a047' : '#e53935';
+    const valY = e.balance >= 0 ? top - 6 : top + h + 12;
+    return `<rect x="${x}" y="${top}" width="${barW}" height="${h}" fill="${col}" rx="3" opacity="0.8"/>
+            <text x="${x + barW/2}" y="${valY}" text-anchor="middle" font-size="8" font-weight="600" fill="${col}">${fmtK(e.balance)}</text>`;
   }).join('');
 
-  const dots = points.map((p, i) => {
-    const x = xScale(i + 1);
-    const y = yScale(p.balance);
-    const col = p.balance >= 0 ? 'var(--success)' : 'var(--danger)';
-    return `<circle cx="${x}" cy="${y}" r="3" fill="${col}"/>`;
+  const polyPts = endBalances.map((e, i) => {
+    const x = pad.left + i * gap + gap / 2;
+    const y = yScale(e.balance);
+    return `${x},${y}`;
+  }).join(' ');
+
+  const dots = endBalances.map((e, i) => {
+    const x = pad.left + i * gap + gap / 2;
+    const y = yScale(e.balance);
+    return `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--primary)" stroke="white" stroke-width="1.5"/>`;
+  }).join('');
+
+  const xLabels = endBalances.map((e, i) => {
+    const x = pad.left + i * gap + gap / 2;
+    const show = n <= 14 || i % Math.ceil(n / 12) === 0;
+    return show ? `<text x="${x}" y="${H - pad.bottom + 14}" text-anchor="middle" font-size="9" fill="var(--muted)">${e.label}</text>` : '';
   }).join('');
 
   const svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:300px">
     ${gridLines}
-    ${zeroY ? `<line x1="${pad.left}" y1="${zeroY}" x2="${W - pad.right}" y2="${zeroY}" stroke="var(--danger)" stroke-width="1" opacity="0.5"/>` : ''}
-    <polyline points="${polyPoints}" fill="none" stroke="var(--primary)" stroke-width="2"/>
+    <line x1="${pad.left}" y1="${zeroY}" x2="${W - pad.right}" y2="${zeroY}" stroke="var(--text)" stroke-width="0.5" opacity="0.3"/>
+    ${bars}
+    <polyline points="${polyPts}" fill="none" stroke="var(--primary)" stroke-width="2" opacity="0.6"/>
     ${dots}
     ${xLabels}
   </svg>`;
