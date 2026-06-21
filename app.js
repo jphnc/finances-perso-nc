@@ -79,6 +79,7 @@ document.getElementById('btn-skip-login').addEventListener('click', () => {
 window.addEventListener('load', () => {
   const hasData = loadLocal();
   if (hasData) {
+    autoBackup();
     renderAll();
     showScreen('screen-main');
   }
@@ -464,6 +465,7 @@ function renderAll() {
   populateAccountFilters();
   document.getElementById('display-email').textContent = localStorage.getItem('userEmail') || '—';
   updateSyncStatus();
+  renderBackupList();
   populateTotalAccountsConfig();
   populateCardConfig();
 }
@@ -688,6 +690,100 @@ document.getElementById('btn-save-card-cfg').addEventListener('click', () => {
   renderAll();
   toast('✅ Configuration carte enregistrée');
   if (accessToken) uploadToDrive().catch(() => {});
+});
+
+// ── SAUVEGARDES LOCALES ──────────────────────────────────────────────────────
+const MAX_BACKUPS = 5;
+
+function autoBackup() {
+  if (!appData.operations.length) return;
+  const backups = JSON.parse(localStorage.getItem('finances_backups') || '[]');
+  const now = new Date();
+  const stamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  backups.push({ date: stamp, data: JSON.stringify(appData) });
+  while (backups.length > MAX_BACKUPS) backups.shift();
+  localStorage.setItem('finances_backups', JSON.stringify(backups));
+}
+
+function renderBackupList() {
+  const backups = JSON.parse(localStorage.getItem('finances_backups') || '[]');
+  const el = document.getElementById('backup-list');
+  if (!backups.length) {
+    el.textContent = 'Aucune sauvegarde';
+    return;
+  }
+  el.innerHTML = backups.map((b, i) => {
+    const d = JSON.parse(b.data);
+    const ops = d.operations ? d.operations.length : 0;
+    return `<div style="display:flex;justify-content:space-between;padding:2px 0">
+      <span>📁 ${b.date}</span>
+      <span>${ops} ops <a href="#" onclick="restoreBackup(${i});return false" style="color:var(--primary);margin-left:8px">restaurer</a></span>
+    </div>`;
+  }).join('');
+}
+
+window.restoreBackup = function(index) {
+  const backups = JSON.parse(localStorage.getItem('finances_backups') || '[]');
+  if (!backups[index]) return;
+  if (!confirm(`Restaurer la sauvegarde du ${backups[index].date} ? Les données actuelles seront remplacées.`)) return;
+  appData = JSON.parse(backups[index].data);
+  saveLocal();
+  renderAll();
+  toast(`✅ Sauvegarde du ${backups[index].date} restaurée`);
+};
+
+document.getElementById('btn-backup-download').addEventListener('click', async () => {
+  const now = new Date();
+  const defaultName = `finances-backup-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}.json`;
+  const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: defaultName,
+        types: [{ description: 'Fichier JSON', accept: { 'application/json': ['.json'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      toast('💾 Sauvegarde enregistrée');
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = defaultName;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('💾 Sauvegarde téléchargée');
+});
+
+document.getElementById('btn-backup-restore').addEventListener('click', () => {
+  document.getElementById('backup-file-input').click();
+});
+
+document.getElementById('backup-file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!imported.operations) throw new Error('Format invalide');
+      if (!confirm(`Restaurer depuis ${file.name} ? (${imported.operations.length} opérations)`)) return;
+      appData = imported;
+      saveLocal();
+      renderAll();
+      toast('✅ Données restaurées depuis le fichier');
+    } catch (err) {
+      toast('❌ ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
 });
 
 // ── RÉINITIALISATION ─────────────────────────────────────────────────────────

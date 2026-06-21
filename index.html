@@ -289,6 +289,14 @@
       <button id="btn-import-bdu" class="btn-primary" style="background:var(--accent)">📂 Importer comptes_data.json</button>
       <div id="import-status" class="hidden" style="font-size:0.8rem;color:var(--accent);margin-top:8px;text-align:center"></div>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Sauvegardes locales</p>
+      <div id="backup-list" style="font-size:0.8rem;color:var(--muted);margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <button id="btn-backup-download" class="btn-secondary" style="flex:1">💾 Télécharger</button>
+        <button id="btn-backup-restore" class="btn-secondary" style="flex:1">📂 Restaurer</button>
+      </div>
+      <input type="file" id="backup-file-input" accept=".json" style="display:none"/>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Zone dangereuse</p>
       <button id="btn-reset" class="btn-secondary" style="margin-top:4px;color:var(--danger);border-color:var(--danger)">🗑️ Réinitialiser toutes les données</button>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
