@@ -1386,24 +1386,55 @@ function renderProjection() {
   const horizonMonths = parseInt(document.getElementById('proj-horizon').value);
   const { startBalance, points, opLines } = calcProjection(accountFilter, horizonMonths);
 
-  // Graphique : solde par mois (barres + courbe + valeurs)
+  // Calcul des soldes par mois
   const cutDay = parseInt(document.getElementById('proj-cutday').value) || 0;
-  const cutLabel = cutDay ? `au ${cutDay}` : 'fin de mois';
   const fmtK = v => { const a = Math.abs(v); return (v<0?'-':'') + (a >= 1000000 ? (a/1000000).toFixed(1)+'M' : a >= 1000 ? Math.round(a/1000)+'k' : a); };
   const fmtN0 = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
 
   const now2 = new Date();
-  const endBalances = [{ label: 'actuel', balance: calcBalanceAtDate(accountFilter, now2.getFullYear(), now2.getMonth(), cutDay) }];
+
+  // Si "Tous les comptes", calculer par compte d'abord pour avoir les vrais totaux
+  const names = getAccountNames();
+  const includedNames = names.filter(name => {
+    const acc = appData.accounts.find(a => a.name === name);
+    return !acc || acc.includeInTotal !== false;
+  });
+
+  const endBalances = [];
+  // Point actuel
+  if (!accountFilter) {
+    let t = 0;
+    for (const name of includedNames) t += calcBalanceAtDate(name, now2.getFullYear(), now2.getMonth(), cutDay);
+    endBalances.push({ label: 'actuel', balance: t });
+  } else {
+    endBalances.push({ label: 'actuel', balance: calcBalanceAtDate(accountFilter, now2.getFullYear(), now2.getMonth(), cutDay) });
+  }
+
+  // Points futurs
+  const accBalancesPerMonth = {};
+  for (const name of includedNames) accBalancesPerMonth[name] = [];
+
   for (let i = 0; i < points.length; i++) {
     const d = new Date(now2.getFullYear(), now2.getMonth() + i + 1, 1);
-    const bal = calcBalanceAtDate(accountFilter, d.getFullYear(), d.getMonth(), cutDay);
     let lbl = points[i].label;
     if (cutDay && cutDay > 0 && cutDay < 31) {
       const mShort = d.toLocaleDateString('fr-FR', { month: 'short' });
       lbl = `${cutDay} ${mShort}`;
     }
-    endBalances.push({ label: lbl, balance: bal });
+    if (!accountFilter) {
+      let t = 0;
+      for (const name of includedNames) {
+        const bal = calcBalanceAtDate(name, d.getFullYear(), d.getMonth(), cutDay);
+        accBalancesPerMonth[name].push(bal);
+        t += bal;
+      }
+      endBalances.push({ label: lbl, balance: t });
+    } else {
+      endBalances.push({ label: lbl, balance: calcBalanceAtDate(accountFilter, d.getFullYear(), d.getMonth(), cutDay) });
+    }
   }
+
+  // Graphique : barres + courbe
 
   const n = endBalances.length;
   const W = Math.max(400, n * 55);
@@ -1474,16 +1505,12 @@ function renderProjection() {
   let accountSummaryHtml = '';
   if (!accountFilter) {
     const fmtS = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
-    const names = getAccountNames();
-    const months = endBalances.slice(1); // exclure "actuel"
+    const months = endBalances.slice(1);
 
     const headerCols = months.map(e => `<th style="padding:4px 6px;text-align:right;font-size:0.7rem;color:var(--muted);white-space:nowrap">${e.label}</th>`).join('');
-    const accRows = names.map(name => {
-      const acc = appData.accounts.find(a => a.name === name);
-      if (acc && acc.includeInTotal === false) return '';
-      const cells = months.map((e, i) => {
-        const d = new Date(now2.getFullYear(), now2.getMonth() + i + 1, 1);
-        const bal = calcBalanceAtDate(name, d.getFullYear(), d.getMonth(), cutDay);
+
+    const accRows = includedNames.map(name => {
+      const cells = (accBalancesPerMonth[name] || []).map(bal => {
         const col = bal >= 0 ? 'var(--accent)' : 'var(--danger)';
         return `<td style="padding:4px 6px;text-align:right;font-size:0.78rem;font-weight:600;color:${col};white-space:nowrap">${fmtS(bal)}</td>`;
       }).join('');
@@ -1491,7 +1518,7 @@ function renderProjection() {
         <td style="padding:4px 6px;font-size:0.8rem;font-weight:600;white-space:nowrap">${name}</td>
         ${cells}
       </tr>`;
-    }).filter(Boolean).join('');
+    }).join('');
 
     const totalCells = months.map(e => {
       const col = e.balance >= 0 ? 'var(--accent)' : 'var(--danger)';
