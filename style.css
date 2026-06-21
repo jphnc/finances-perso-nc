@@ -291,14 +291,30 @@ input:focus, select:focus { border-color: var(--primary-light); background: whit
 /* ---- Utilitaires ---- */
 .hidden { display: none !important; }
 
+/* Zone d'impression */
+#print-area { display: none; }
+body.printing #print-area { display: block; }
+body.printing #screen-login,
+body.printing #screen-lock,
+body.printing #screen-main { display: none !important; }
+body.printing #toast { display: none !important; }
+
+.print-doc { font-family: -apple-system, sans-serif; padding: 20px; color: #1c1c1e; font-size: 12px; }
+.print-doc h1 { font-size: 18px; margin-bottom: 4px; color: #1a237e; }
+.print-doc h2 { font-size: 14px; color: #6b7280; margin-bottom: 12px; }
+.print-doc table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+.print-doc th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #1a237e; font-size: 11px; color: #6b7280; }
+.print-doc td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+.print-doc .right { text-align: right; }
+.print-doc .debit { color: #e53935; }
+.print-doc .credit { color: #43a047; }
+.print-doc .bold { font-weight: 700; }
+.print-doc .total-row { border-top: 2px solid #1a237e; font-weight: 700; font-size: 13px; }
+
 @media print {
-  body { background: white; }
-  .bottom-nav, .top-header button, .filter-bar, .balance-card,
-  #screen-login, #screen-lock, .nav-btn, .btn-primary, .btn-secondary,
-  #toast, .modal { display: none !important; }
-  .screen, .tab-content { display: block !important; padding: 0; }
+  body { background: white !important; }
+  body > *:not(#print-area) { display: none !important; }
   #print-area { display: block !important; }
-  #screen-main { padding-bottom: 0; max-width: 100%; }
 }
 
 @media (min-width: 600px) {

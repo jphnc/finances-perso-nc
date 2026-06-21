@@ -935,28 +935,26 @@ document.getElementById('btn-save-card-cfg').addEventListener('click', () => {
 
 // ── IMPRESSION ──────────────────────────────────────────────────────────────
 function printContent(title, html) {
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>${title}</title>
-    <style>
-      body { font-family: -apple-system, sans-serif; padding: 20px; color: #1c1c1e; font-size: 12px; }
-      h1 { font-size: 18px; margin-bottom: 4px; }
-      h2 { font-size: 14px; color: #6b7280; margin-bottom: 12px; }
-      table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-      th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #1a237e; font-size: 11px; color: #6b7280; }
-      td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
-      .right { text-align: right; }
-      .debit { color: #e53935; }
-      .credit { color: #43a047; }
-      .bold { font-weight: 700; }
-      .total-row { border-top: 2px solid #1a237e; font-weight: 700; font-size: 13px; }
-      .section { margin-top: 20px; }
-      @media print { body { padding: 0; } }
-    </style>
-  </head><body>${html}
-    <script>window.print();window.onafterprint=()=>window.close();<\/script>
-  </body></html>`);
-  win.document.close();
+  // Imprime dans la page elle-même (pas de nouvelle fenêtre → pas de blocage en PWA)
+  let area = document.getElementById('print-area');
+  if (!area) {
+    area = document.createElement('div');
+    area.id = 'print-area';
+    document.body.appendChild(area);
+  }
+  area.innerHTML = `<div class="print-doc">${html}</div>`;
+  document.body.classList.add('printing');
+
+  const cleanup = () => {
+    document.body.classList.remove('printing');
+    area.innerHTML = '';
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+  // Filet de sécurité si afterprint ne se déclenche pas
+  setTimeout(() => { if (document.body.classList.contains('printing')) cleanup(); }, 60000);
+
+  setTimeout(() => window.print(), 100);
 }
 
 document.getElementById('btn-print-dashboard').addEventListener('click', () => {
