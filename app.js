@@ -1388,7 +1388,16 @@ function renderProjection() {
   for (let i = 0; i < points.length; i++) {
     const d = new Date(now2.getFullYear(), now2.getMonth() + i + 1, 1);
     const bal = calcBalanceAtDate(accountFilter, d.getFullYear(), d.getMonth(), cutDay);
-    endBalances.push({ label: points[i].label, balance: bal });
+    let lbl = points[i].label;
+    if (cutDay && cutDay > 0 && cutDay < 31) {
+      // Afficher la période : du (jour+1) mois précédent au (jour) mois courant
+      const prevD = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+      const fromDay = cutDay + 1;
+      const fromMonth = prevD.toLocaleDateString('fr-FR', { month: 'short' });
+      const toMonth = d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+      lbl = `${fromDay}/${fromMonth}-${cutDay}/${toMonth}`;
+    }
+    endBalances.push({ label: lbl, balance: bal });
   }
 
   const n = endBalances.length;
