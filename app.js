@@ -80,8 +80,13 @@ document.getElementById('btn-unlock').addEventListener('click', async () => {
     } else {
       showScreen('screen-login');
     }
-    // Initialiser Google sans popup — la sync se fait via les boutons
+    // Initialiser Google et sync silencieuse
     if (typeof google !== 'undefined' && google.accounts && !tokenClient) initGoogleAuth();
+    const saved = localStorage.getItem('gToken');
+    if (saved && tokenClient) {
+      accessToken = saved;
+      syncFromDrive().catch(() => { accessToken = null; });
+    }
   } else {
     document.getElementById('lock-error').textContent = 'Mot de passe incorrect';
     document.getElementById('lock-error').classList.remove('hidden');
@@ -149,6 +154,8 @@ function saveLocal(touch = true) {
     appData.lastSyncLocal = now.toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
   }
   localStorage.setItem('finances_data', JSON.stringify(appData));
+  // Auto-upload vers Drive si connecté (silencieux, pas de popup)
+  if (touch && accessToken) uploadToDrive().catch(() => {});
 }
 function loadLocal() {
   const raw = localStorage.getItem('finances_data');
@@ -260,11 +267,16 @@ window.addEventListener('load', () => {
   initBackupDir();
 
   if (locked) return;
-  // Initialiser Google sans popup — la sync se fait via les boutons dans Paramètres
+  // Initialiser Google et tenter une sync silencieuse avec le token sauvegardé
   const waitGoogle = setInterval(() => {
     if (typeof google !== 'undefined' && google.accounts) {
       clearInterval(waitGoogle);
       initGoogleAuth();
+      const saved = localStorage.getItem('gToken');
+      if (saved) {
+        accessToken = saved;
+        syncFromDrive().catch(() => { accessToken = null; });
+      }
     }
   }, 200);
 });
@@ -277,7 +289,7 @@ async function driveRequest(method, url, body = null) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(url, opts);
-  if (res.status === 401) { accessToken = null; throw new Error('Token expiré — resynchronisez depuis Paramètres'); }
+  if (res.status === 401) { accessToken = null; localStorage.removeItem('gToken'); throw new Error('Token expiré — resynchronisez depuis Paramètres'); }
   return res;
 }
 async function findOrCreateFile() {
