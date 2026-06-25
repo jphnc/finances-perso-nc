@@ -2390,6 +2390,13 @@ document.getElementById('btn-scope-one').addEventListener('click', () => {
 function toggleEditDest() {
   const isVirement = document.getElementById('edit-op-type').value === 'virement';
   document.getElementById('edit-op-dest-wrap').classList.toggle('hidden', !isVirement);
+  if (isVirement) {
+    const catSel = document.getElementById('edit-op-category');
+    if (!catSel.querySelector('option[value="Virement"]')) {
+      catSel.innerHTML += '<option value="Virement">Virement</option>';
+    }
+    catSel.value = 'Virement';
+  }
 }
 document.getElementById('edit-op-type').addEventListener('change', toggleEditDest);
 
