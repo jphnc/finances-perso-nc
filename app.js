@@ -2406,14 +2406,12 @@ window.setPasteRole = function(idx, role) {
   renderPasteStep2();
 };
 
-document.getElementById('btn-paste-back').addEventListener('click', () => {
-  document.getElementById('paste-step1').classList.remove('hidden');
-  document.getElementById('paste-step2').classList.add('hidden');
-});
+// Étape 2 → Étape 3 : revue des opérations avec catégories
+let parsedOps = [];
 
-document.getElementById('btn-paste-import').addEventListener('click', () => {
+document.getElementById('btn-paste-next').addEventListener('click', () => {
   const account = document.getElementById('paste-account').value;
-  const category = document.getElementById('paste-category').value;
+  const defaultCat = document.getElementById('paste-category').value;
   if (!account) { toast('⚠️ Sélectionnez un compte'); return; }
 
   const dateCol = pasteData.colRoles.indexOf('date');
@@ -2426,9 +2424,8 @@ document.getElementById('btn-paste-import').addEventListener('click', () => {
   if (labelCol < 0) { toast('⚠️ Assignez une colonne Libellé'); return; }
   if (debitCol < 0 && creditCol < 0 && montantCol < 0) { toast('⚠️ Assignez une colonne Débit, Crédit ou Montant'); return; }
 
-  let imported = 0;
+  parsedOps = [];
   for (const row of pasteData.rows) {
-    // Parser la date
     let dateStr = (row[dateCol] || '').trim();
     const dm = dateStr.match(/(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
     if (!dm) continue;
@@ -2439,7 +2436,6 @@ document.getElementById('btn-paste-import').addEventListener('click', () => {
     const label = (row[labelCol] || '').trim();
     if (!label) continue;
 
-    // Parser le montant
     let amount = 0, type = 'debit';
     if (debitCol >= 0 && creditCol >= 0) {
       const dVal = parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
@@ -2462,56 +2458,109 @@ document.getElementById('btn-paste-import').addEventListener('click', () => {
       type = 'credit';
     }
 
+    parsedOps.push({ date: dateStr, label, amount, type, category: defaultCat });
+  }
+
+  if (!parsedOps.length) { toast('⚠️ Aucune opération valide'); return; }
+  renderPasteStep3();
+});
+
+function renderPasteStep3() {
+  document.getElementById('paste-step2').classList.add('hidden');
+  document.getElementById('paste-step3').classList.remove('hidden');
+
+  const catOptions = ['Alimentation','Transport','Sante','Loisirs','Logement','Telecom','Revenus','Autre','Virement']
+    .map(c => `<option value="${c}">${CAT_ICONS[c] || '📦'} ${c}</option>`).join('');
+
+  const rows = parsedOps.map((op, i) => {
+    const sign = op.type === 'credit' ? '+' : '-';
+    const col = op.type === 'credit' ? 'var(--accent)' : 'var(--danger)';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <span style="font-size:0.78rem;color:var(--muted);min-width:70px">${formatDate(op.date)}</span>
+      <span style="flex:1;font-size:0.85rem;font-weight:600;min-width:100px">${op.label}</span>
+      <span style="font-weight:700;color:${col};font-size:0.9rem;min-width:80px;text-align:right">${sign}${fmt(op.amount)}</span>
+      <select onchange="parsedOps[${i}].category=this.value" style="padding:4px 6px;font-size:0.78rem;min-width:100px">${catOptions.replace(`value="${op.category}"`, `value="${op.category}" selected`)}</select>
+    </div>`;
+  }).join('');
+
+  document.getElementById('paste-review').innerHTML = rows;
+  document.getElementById('paste-count').textContent = parsedOps.length;
+}
+
+document.getElementById('btn-paste-back2').addEventListener('click', () => {
+  document.getElementById('paste-step3').classList.add('hidden');
+  document.getElementById('paste-step2').classList.remove('hidden');
+});
+
+document.getElementById('btn-paste-back').addEventListener('click', () => {
+  document.getElementById('paste-step1').classList.remove('hidden');
+  document.getElementById('paste-step2').classList.add('hidden');
+});
+
+document.getElementById('btn-paste-import').addEventListener('click', () => {
+  const account = document.getElementById('paste-account').value;
+  if (!account) { toast('⚠️ Sélectionnez un compte'); return; }
+  if (!parsedOps.length) { toast('⚠️ Aucune opération'); return; }
+
+  let imported = 0;
+  for (const op of parsedOps) {
     appData.operations.push({
       id: uid(),
-      date: dateStr,
-      label,
-      amount,
-      type,
+      date: op.date,
+      label: op.label,
+      amount: op.amount,
+      type: op.type,
       account,
-      category,
+      category: op.category,
       opType: 'Operation',
     });
     imported++;
   }
 
   if (imported > 0) {
-    // Sauvegarder les IDs importés pour pouvoir annuler
     const importedIds = appData.operations.slice(-imported).map(op => op.id);
     localStorage.setItem('lastImportIds', JSON.stringify(importedIds));
-    localStorage.setItem('lastImportAccount', account);
-    localStorage.setItem('lastImportCount', imported);
-
     saveLocal();
     renderAll();
     document.getElementById('modal-paste-import').classList.add('hidden');
-    toast(`✅ ${imported} opérations importées dans ${account}`);
-    showUndoImport(imported, account);
+
+    // Afficher la barre de validation
+    document.getElementById('import-bar-text').textContent = `⏳ ${imported} opérations importées dans ${account} — vérifiez puis validez ou annulez`;
+    document.getElementById('import-validation-bar').classList.remove('hidden');
+    document.getElementById('import-validation-bar').style.display = 'flex';
+
+    // Aller sur le compte pour vérifier
+    document.getElementById('filter-account').value = account;
+    opsMonth = new Date().getMonth();
+    opsYear = new Date().getFullYear();
+    renderOperations();
+    showTab('operations');
+
+    toast(`📋 ${imported} opérations importées — vérifiez puis validez`);
   } else {
     toast('⚠️ Aucune opération valide trouvée');
   }
 });
 
-function showUndoImport(count, account) {
-  const el = document.getElementById('toast');
-  el.innerHTML = `${count} ops importées dans ${account} — <a href="#" onclick="undoImport();return false" style="color:var(--danger);font-weight:700;text-decoration:underline">Annuler</a>`;
-  el.classList.remove('hidden');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.add('hidden'), 15000);
-}
+document.getElementById('btn-import-validate').addEventListener('click', () => {
+  localStorage.removeItem('lastImportIds');
+  document.getElementById('import-validation-bar').classList.add('hidden');
+  document.getElementById('import-validation-bar').style.display = 'none';
+  toast('✅ Import validé');
+});
 
-window.undoImport = function() {
+document.getElementById('btn-import-cancel').addEventListener('click', () => {
+  if (!confirm('Annuler l\'import et supprimer toutes les opérations importées ?')) return;
   const ids = JSON.parse(localStorage.getItem('lastImportIds') || '[]');
-  if (!ids.length) { toast('⚠️ Aucun import à annuler'); return; }
   const count = ids.length;
   appData.operations = appData.operations.filter(op => !ids.includes(op.id));
   localStorage.removeItem('lastImportIds');
-  localStorage.removeItem('lastImportAccount');
-  localStorage.removeItem('lastImportCount');
+  document.getElementById('import-validation-bar').classList.add('hidden');
+  document.getElementById('import-validation-bar').style.display = 'none';
   saveLocal();
   renderAll();
   toast(`↩️ ${count} opérations supprimées`);
-};
+});
 
 // ── POINTAGE ────────────────────────────────────────────────────────────────
 window.togglePointed = function(id) {

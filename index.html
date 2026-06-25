@@ -381,7 +381,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
       <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:6px"></p>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v58</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v59</p>
     </div>
   </div>
 
@@ -568,10 +568,28 @@
       </div>
       <div style="display:flex;gap:8px">
         <button id="btn-paste-back" class="btn-secondary" style="flex:0 0 auto">⬅️ Retour</button>
+        <button id="btn-paste-next" class="btn-primary" style="flex:1">Revue des opérations ➡️</button>
+      </div>
+    </div>
+
+    <!-- Étape 3 : Revue et catégories -->
+    <div id="paste-step3" class="hidden">
+      <h3>Étape 3 — Vérifier et catégoriser</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px">Choisissez la catégorie de chaque opération puis importez</p>
+      <div id="paste-review" style="overflow-y:auto;max-height:55vh;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <button id="btn-paste-back2" class="btn-secondary" style="flex:0 0 auto">⬅️ Retour</button>
         <button id="btn-paste-import" class="btn-primary" style="flex:1">✅ Importer <span id="paste-count"></span> opérations</button>
       </div>
     </div>
   </div>
+</div>
+
+<!-- Barre validation import -->
+<div id="import-validation-bar" class="hidden" style="position:fixed;bottom:72px;left:0;right:0;background:var(--card);border-top:2px solid var(--warning);padding:10px 16px;display:flex;align-items:center;gap:8px;z-index:150;box-shadow:0 -4px 16px rgba(0,0,0,0.1)">
+  <span id="import-bar-text" style="flex:1;font-size:0.85rem;font-weight:600;color:var(--warning)"></span>
+  <button id="btn-import-validate" style="padding:8px 14px;border:none;border-radius:10px;background:var(--accent);color:white;font-weight:700;font-size:0.85rem;cursor:pointer">✅ Valider</button>
+  <button id="btn-import-cancel" style="padding:8px 14px;border:none;border-radius:10px;background:var(--danger);color:white;font-weight:700;font-size:0.85rem;cursor:pointer">❌ Annuler</button>
 </div>
 
 <!-- Choix modification programmée -->
