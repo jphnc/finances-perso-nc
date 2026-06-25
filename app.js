@@ -2307,6 +2307,7 @@ document.getElementById('btn-open-paste-import').addEventListener('click', () =>
 });
 
 document.getElementById('btn-paste-cancel').addEventListener('click', () => {
+  if (!confirm('Quitter l\'import ? Les données collées seront conservées.')) return;
   document.getElementById('modal-paste-import').classList.add('hidden');
 });
 
@@ -2592,7 +2593,6 @@ document.getElementById('btn-import-validate').addEventListener('click', () => {
 });
 
 document.getElementById('btn-import-cancel').addEventListener('click', () => {
-  if (!confirm('Annuler l\'import et supprimer toutes les opérations importées ?')) return;
   const ids = JSON.parse(localStorage.getItem('lastImportIds') || '[]');
   const count = ids.length;
   appData.operations = appData.operations.filter(op => !ids.includes(op.id));
@@ -2601,7 +2601,15 @@ document.getElementById('btn-import-cancel').addEventListener('click', () => {
   document.getElementById('import-validation-bar').style.display = 'none';
   saveLocal();
   renderAll();
-  toast(`↩️ ${count} opérations supprimées`);
+  toast(`↩️ ${count} opérations retirées — vous pouvez modifier et réimporter`);
+
+  // Rouvrir le modal à l'étape 3 (revue) si les données sont encore là
+  if (parsedOps.length) {
+    document.getElementById('modal-paste-import').classList.remove('hidden');
+    document.getElementById('paste-step1').classList.add('hidden');
+    document.getElementById('paste-step2').classList.add('hidden');
+    renderPasteStep3();
+  }
 });
 
 // ── POINTAGE ────────────────────────────────────────────────────────────────
