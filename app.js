@@ -427,6 +427,30 @@ function calcBillingBalance(accountName, refDate) {
     op.type === 'debit' ? sum + op.amount : sum - op.amount, 0);
 }
 
+function getBillingInfo(accountName) {
+  const acc = appData.accounts.find(a => a.name === accountName);
+  if (!acc || acc.cardType !== 'deferred') return { period: '', detail: '' };
+  const d = new Date();
+  const cycleStart = getBillingCycleStart(acc.billingCycleDay, d);
+  const startStr = localDateStr(cycleStart);
+  const endStr = localDateStr(d);
+
+  const ops = appData.operations.filter(op =>
+    op.account === accountName &&
+    op.opType !== 'Programmee' &&
+    op.date >= startStr && op.date <= endStr
+  );
+
+  const startFmt = cycleStart.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  const endFmt = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  const period = `${startFmt} → ${endFmt}`;
+  const detail = ops.map(op => {
+    const sign = op.type === 'credit' ? '+' : '-';
+    return `${op.date.substring(8,10)}/${op.date.substring(5,7)} ${sign}${op.amount} ${op.label}`;
+  }).join(' | ');
+  return { period, detail: ops.length + ' ops : ' + detail };
+}
+
 function calcEncours(accountName, refDate) {
   const acc = appData.accounts.find(a => a.name === accountName);
   if (!acc || acc.cardType !== 'deferred') return null;
@@ -481,6 +505,7 @@ function renderDashboard() {
       let extraHtml = '';
       if (isDeferred) {
         const billing = calcBillingBalance(name);
+        const billingInfo = getBillingInfo(name);
         const encours = calcEncours(name);
         const limit = acc.cardLimit || 0;
         const remaining = limit - encours;
@@ -489,9 +514,10 @@ function renderDashboard() {
         extraHtml = `
           <div style="width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:0.78rem;display:flex;flex-direction:column;gap:6px">
             <div style="display:flex;justify-content:space-between">
-              <span style="color:var(--muted)">Prochain prélèvement</span>
+              <span style="color:var(--muted)">Prélèvement (${billingInfo.period})</span>
               <span style="font-weight:700;color:var(--danger)">${fmt(billing)}</span>
             </div>
+            <div style="font-size:0.7rem;color:var(--muted)">${billingInfo.detail}</div>
             <div style="display:flex;justify-content:space-between">
               <span style="color:var(--muted)">Encours informatique (30j)</span>
               <span style="font-weight:700;color:var(--primary)">${fmt(encours)}</span>
