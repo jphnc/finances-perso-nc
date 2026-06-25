@@ -435,10 +435,10 @@ function calcEncours(accountName, refDate) {
   const ops = appData.operations.filter(op =>
     op.account === accountName &&
     op.opType !== 'Programmee' &&
+    op.type === 'debit' &&
     op.date >= cutoffStr && op.date <= endStr
   );
-  return ops.reduce((sum, op) =>
-    op.type === 'debit' ? sum + op.amount : sum - op.amount, 0);
+  return ops.reduce((sum, op) => sum + op.amount, 0);
 }
 
 function getAccountNames() {
