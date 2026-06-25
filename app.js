@@ -527,6 +527,7 @@ function renderDashboard() {
 
 let opsMonth = new Date().getMonth();
 let opsYear  = new Date().getFullYear();
+let opsSortAsc = true; // true = croissant (ancien→récent), false = décroissant
 
 function renderOperations() {
   const accFilter  = document.getElementById('filter-account').value;
@@ -580,12 +581,20 @@ function renderOperations() {
       return;
     }
 
+    // Calculer le solde cumulé dans l'ordre croissant (toujours)
     let running = balanceStart;
-    list.innerHTML = monthOps.map(op => {
+    const opsWithBalance = monthOps.map(op => {
       const delta = op.type === 'credit' ? op.amount : -op.amount;
       running += delta;
+      return { op, balance: running };
+    });
+
+    // Afficher dans l'ordre choisi
+    const displayOps = opsSortAsc ? opsWithBalance : [...opsWithBalance].reverse();
+
+    list.innerHTML = displayOps.map(({ op, balance }) => {
       const sign = op.type === 'credit' ? '+' : '-';
-      const balCol = running >= 0 ? 'var(--accent)' : 'var(--danger)';
+      const balCol = balance >= 0 ? 'var(--accent)' : 'var(--danger)';
       return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer" onclick="editOp('${op.id}','${op.date}')">
         <div style="display:flex;align-items:center;gap:12px">
           <span class="op-icon">${op.opType === 'Programmee' ? '🔁' : (CAT_ICONS[op.category] || '📦')}</span>
@@ -596,7 +605,7 @@ function renderOperations() {
           <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
         </div>
         <div style="text-align:right;font-size:0.78rem;color:${balCol};font-weight:600;border-top:1px solid var(--border);padding-top:5px">
-          Solde : ${fmtN(running)} F
+          Solde : ${fmtN(balance)} F
         </div>
       </li>`;
     }).join('');
@@ -684,6 +693,13 @@ document.getElementById('btn-filter-reset').addEventListener('click', () => {
   opsYear  = new Date().getFullYear();
   renderOperations();
 });
+document.getElementById('btn-sort-ops').addEventListener('click', () => {
+  opsSortAsc = !opsSortAsc;
+  document.getElementById('btn-sort-ops').textContent = opsSortAsc ? '⬇️' : '⬆️';
+  document.getElementById('btn-sort-ops').title = opsSortAsc ? 'Tri croissant (ancien→récent)' : 'Tri décroissant (récent→ancien)';
+  renderOperations();
+});
+
 document.getElementById('btn-ops-month-prev').addEventListener('click', () => {
   opsMonth--; if (opsMonth < 0) { opsMonth = 11; opsYear--; }
   renderOperations();
