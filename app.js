@@ -586,7 +586,7 @@ function renderOperations() {
       running += delta;
       const sign = op.type === 'credit' ? '+' : '-';
       const balCol = running >= 0 ? 'var(--accent)' : 'var(--danger)';
-      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer" onclick="editOp('${op.id}')">
+      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer" onclick="editOp('${op.id}','${op.date}')">
         <div style="display:flex;align-items:center;gap:12px">
           <span class="op-icon">${op.opType === 'Programmee' ? '🔁' : (CAT_ICONS[op.category] || '📦')}</span>
           <div class="op-info">
@@ -621,7 +621,7 @@ function opHtml(op, showAccount = false) {
   const meta = showAccount
     ? `${formatDate(op.date)} · ${op.account || ''} · ${op.category}`
     : `${formatDate(op.date)} · ${op.category}`;
-  return `<li style="cursor:pointer" onclick="editOp('${op.id}')">
+  return `<li style="cursor:pointer" onclick="editOp('${op.id}','${op.date}')">
     <span class="op-icon">${CAT_ICONS[op.category] || '📦'}</span>
     <div class="op-info">
       <div class="op-label">${op.label}</div>
@@ -1629,6 +1629,10 @@ function scheduledOpsInMonth(year, month, accountFilter) {
     else if (freq === 'annuelle') applies = diffMonths >= 0 && diffMonths % 12 === 0;
     if (!applies) continue;
 
+    // Vérifier les exceptions (mois où l'occurrence a été modifiée individuellement)
+    const exMonth = `${year}-${String(month+1).padStart(2,'0')}`;
+    if (op.exceptions && op.exceptions.includes(exMonth)) continue;
+
     const baseDay = baseDate.getDate();
     const lastDayOfTarget = new Date(year, month + 1, 0).getDate();
     const adjustedDay = Math.min(baseDay, lastDayOfTarget);
@@ -2235,11 +2239,23 @@ document.getElementById('form-scheduled').addEventListener('submit', async (e) =
 
 // ── MODIFICATION OPÉRATION ───────────────────────────────────────────────────
 let _editOpId = null;
+let _editOpDate = null; // date de l'occurrence cliquée
 
-window.editOp = function(id) {
+window.editOp = function(id, occurrenceDate) {
   const op = appData.operations.find(o => o.id === id);
   if (!op) return;
   _editOpId = id;
+  _editOpDate = occurrenceDate || op.date;
+
+  // Si c'est une opération programmée, demander le scope
+  if (op.opType === 'Programmee') {
+    document.getElementById('modal-edit-scope').classList.remove('hidden');
+    return;
+  }
+  openEditModal(op);
+};
+
+function openEditModal(op) {
   const names = getAccountNames();
   const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
   document.getElementById('edit-op-account').innerHTML = opts;
@@ -2257,7 +2273,67 @@ window.editOp = function(id) {
     if (destMatch) document.getElementById('edit-op-dest').value = destMatch[1];
   }
   document.getElementById('modal-edit-op').classList.remove('hidden');
-};
+}
+
+// Handlers pour le choix de scope (programmée)
+document.getElementById('btn-scope-cancel').addEventListener('click', () => {
+  document.getElementById('modal-edit-scope').classList.add('hidden');
+  _editOpId = null;
+});
+
+document.getElementById('btn-scope-all').addEventListener('click', () => {
+  document.getElementById('modal-edit-scope').classList.add('hidden');
+  const op = appData.operations.find(o => o.id === _editOpId);
+  if (op) openEditModal(op);
+});
+
+document.getElementById('btn-scope-one').addEventListener('click', () => {
+  document.getElementById('modal-edit-scope').classList.add('hidden');
+  const op = appData.operations.find(o => o.id === _editOpId);
+  if (!op) return;
+
+  // Créer une copie modifiable pour cette occurrence
+  const newOp = {
+    id: uid(),
+    date: _editOpDate,
+    label: op.label,
+    amount: op.amount,
+    type: op.type,
+    account: op.account,
+    category: op.category || 'Autre',
+    opType: 'Operation',
+  };
+  appData.operations.push(newOp);
+
+  // Si c'est un virement, créer aussi le crédit
+  const destMatch = op.label && op.label.match(/^\[(.+)\]$/);
+  const dest = op.virementDest || (destMatch ? destMatch[1] : null);
+  if (dest) {
+    appData.operations.push({
+      id: uid(),
+      date: _editOpDate,
+      label: `[${op.account}]`,
+      amount: op.amount,
+      type: 'credit',
+      account: dest,
+      category: 'Virement',
+      opType: 'Virement',
+    });
+    newOp.opType = 'Virement';
+  }
+
+  // Ajouter une exception sur l'op programmée pour ce mois
+  if (!op.exceptions) op.exceptions = [];
+  const exMonth = _editOpDate.substring(0, 7); // "2026-08"
+  if (!op.exceptions.includes(exMonth)) op.exceptions.push(exMonth);
+
+  saveLocal();
+  renderAll();
+
+  // Ouvrir le modal sur la nouvelle opération pour la modifier
+  _editOpId = newOp.id;
+  openEditModal(newOp);
+});
 
 function toggleEditDest() {
   const isVirement = document.getElementById('edit-op-type').value === 'virement';
