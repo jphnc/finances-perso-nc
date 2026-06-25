@@ -2315,7 +2315,8 @@ document.getElementById('btn-paste-parse').addEventListener('click', () => {
   if (!raw) { toast('⚠️ Collez des données d\'abord'); return; }
 
   // Détecter le séparateur (tab, point-virgule, virgule)
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const skipRows = parseInt(document.getElementById('paste-skip-rows').value) || 0;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean).slice(skipRows);
   let sep = '\t';
   if (lines[0].includes('\t')) sep = '\t';
   else if (lines[0].includes(';')) sep = ';';
@@ -2410,10 +2411,10 @@ function renderPasteStep2() {
 
   // Aperçu tableau (5 premières lignes)
   const visibleCols = pasteData.headers.map((_, i) => i).filter(i => !pasteData.removedCols.includes(i));
-  const previewRows = pasteData.rows.slice(0, 8);
-  const thHtml = visibleCols.map(i => `<th style="padding:4px 6px;font-size:0.7rem;white-space:nowrap;border-bottom:1px solid var(--border);color:var(--muted)">${pasteData.headers[i]}</th>`).join('');
-  const trHtml = previewRows.map(row =>
-    `<tr>${visibleCols.map(i => `<td style="padding:3px 6px;font-size:0.75rem;white-space:nowrap;border-bottom:1px solid var(--border)">${row[i] || ''}</td>`).join('')}</tr>`
+  const previewRows = pasteData.rows.slice(0, 15);
+  const thHtml = `<th style="padding:4px 6px;font-size:0.7rem;border-bottom:1px solid var(--border);color:var(--muted)">#</th>` + visibleCols.map(i => `<th style="padding:4px 6px;font-size:0.7rem;white-space:nowrap;border-bottom:1px solid var(--border);color:var(--muted)">${pasteData.headers[i]}</th>`).join('');
+  const trHtml = previewRows.map((row, idx) =>
+    `<tr><td style="padding:3px 6px;font-size:0.7rem;color:var(--muted);border-bottom:1px solid var(--border)">${idx+1}</td>${visibleCols.map(i => `<td style="padding:3px 6px;font-size:0.75rem;white-space:nowrap;border-bottom:1px solid var(--border)">${row[i] || '<span style="color:var(--danger)">vide</span>'}</td>`).join('')}</tr>`
   ).join('');
 
   document.getElementById('paste-preview').innerHTML = `
