@@ -406,13 +406,17 @@ function getBillingCycleStart(billingDay, refDate) {
   }
 }
 
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function calcBillingBalance(accountName, refDate) {
   const acc = appData.accounts.find(a => a.name === accountName);
   if (!acc || acc.cardType !== 'deferred') return null;
   const d = refDate || new Date();
   const cycleStart = getBillingCycleStart(acc.billingCycleDay, d);
-  const startStr = cycleStart.toISOString().split('T')[0];
-  const endStr = d.toISOString().split('T')[0];
+  const startStr = localDateStr(cycleStart);
+  const endStr = localDateStr(d);
 
   const ops = appData.operations.filter(op =>
     op.account === accountName &&
@@ -429,8 +433,8 @@ function calcEncours(accountName, refDate) {
   const d = refDate || new Date();
   const cutoff = new Date(d);
   cutoff.setDate(cutoff.getDate() - 30);
-  const cutoffStr = cutoff.toISOString().split('T')[0];
-  const endStr = d.toISOString().split('T')[0];
+  const cutoffStr = localDateStr(cutoff);
+  const endStr = localDateStr(d);
 
   const ops = appData.operations.filter(op =>
     op.account === accountName &&
