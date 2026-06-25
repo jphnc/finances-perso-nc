@@ -2335,8 +2335,31 @@ document.getElementById('btn-paste-parse').addEventListener('click', () => {
     pasteData.headers = firstRow;
     pasteData.rows = allRows.slice(1);
   } else {
-    pasteData.headers = firstRow.map((_, i) => `Colonne ${i + 1}`);
+    // Pas de titre : utiliser la 1ère valeur comme indice
+    pasteData.headers = firstRow.map((val, i) => {
+      const short = val.length > 15 ? val.substring(0, 15) + '…' : val;
+      return `Col ${i + 1} (${short || '—'})`;
+    });
     pasteData.rows = allRows;
+  }
+
+  // Auto-détecter les rôles à partir des données si pas de header
+  if (!hasHeader && pasteData.rows.length > 0) {
+    pasteData.colRoles = firstRow.map((val, i) => {
+      // Détecter par le contenu
+      if (/^\d{1,2}[/\-.]/.test(val)) return 'date';
+      const num = parseFloat(val.replace(/\s/g, '').replace(',', '.'));
+      if (!isNaN(num) && num !== 0) {
+        // Colonne numérique — deviner si débit ou crédit
+        const allVals = allRows.map(r => parseFloat((r[i]||'').replace(/\s/g, '').replace(',', '.')) || 0);
+        const hasNeg = allVals.some(v => v < 0);
+        const hasMix = allVals.some(v => v > 0) && hasNeg;
+        if (hasMix) return 'montant';
+        return '';
+      }
+      if (val.length > 3 && isNaN(num)) return 'label';
+      return '';
+    });
   }
 
   // Auto-détecter les rôles des colonnes
