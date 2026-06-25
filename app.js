@@ -2398,6 +2398,16 @@ function renderPasteStep2() {
   }).join('');
   document.getElementById('paste-columns').innerHTML = colsHtml;
 
+  // Avertissements
+  const warnings = [];
+  const hasDate = pasteData.colRoles.some((r, i) => r === 'date' && !pasteData.removedCols.includes(i));
+  const hasLabel = pasteData.colRoles.some((r, i) => r === 'label' && !pasteData.removedCols.includes(i));
+  const hasAmount = pasteData.colRoles.some((r, i) => ['debit','credit','montant'].includes(r) && !pasteData.removedCols.includes(i));
+  if (!hasDate) warnings.push('⚠️ Pas de colonne Date assignée');
+  if (!hasLabel) warnings.push('⚠️ Pas de colonne Libellé assignée');
+  if (!hasAmount) warnings.push('⚠️ Pas de colonne Montant/Débit/Crédit assignée');
+  document.getElementById('paste-col-warning').textContent = warnings.join(' · ');
+
   // Aperçu tableau (5 premières lignes)
   const visibleCols = pasteData.headers.map((_, i) => i).filter(i => !pasteData.removedCols.includes(i));
   const previewRows = pasteData.rows.slice(0, 8);
@@ -2448,16 +2458,17 @@ document.getElementById('btn-paste-next').addEventListener('click', () => {
   if (debitCol < 0 && creditCol < 0 && montantCol < 0) { toast('⚠️ Assignez une colonne Débit, Crédit ou Montant'); return; }
 
   parsedOps = [];
+  let skipDate = 0, skipLabel = 0, skipAmount = 0;
   for (const row of pasteData.rows) {
     let dateStr = (row[dateCol] || '').trim();
     const dm = dateStr.match(/(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
-    if (!dm) continue;
+    if (!dm) { skipDate++; continue; }
     let [_, dd, mm, yy] = dm;
     if (yy.length === 2) yy = '20' + yy;
     dateStr = `${yy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
 
     const label = (row[labelCol] || '').trim();
-    if (!label) continue;
+    if (!label) { skipLabel++; continue; }
 
     let amount = 0, type = 'debit';
     if (debitCol >= 0 && creditCol >= 0) {
@@ -2465,26 +2476,33 @@ document.getElementById('btn-paste-next').addEventListener('click', () => {
       const cVal = parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
       if (cVal > 0) { amount = Math.round(cVal); type = 'credit'; }
       else if (dVal > 0) { amount = Math.round(dVal); type = 'debit'; }
-      else continue;
+      else { skipAmount++; continue; }
     } else if (montantCol >= 0) {
       const val = parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
-      if (val === 0) continue;
+      if (val === 0) { skipAmount++; continue; }
       amount = Math.round(Math.abs(val));
       type = val > 0 ? 'credit' : 'debit';
     } else if (debitCol >= 0) {
       amount = Math.round(Math.abs(parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
-      if (!amount) continue;
+      if (!amount) { skipAmount++; continue; }
       type = 'debit';
     } else if (creditCol >= 0) {
       amount = Math.round(Math.abs(parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
-      if (!amount) continue;
+      if (!amount) { skipAmount++; continue; }
       type = 'credit';
     }
 
     parsedOps.push({ date: dateStr, label, amount, type, category: defaultCat });
   }
 
-  if (!parsedOps.length) { toast('⚠️ Aucune opération valide'); return; }
+  if (!parsedOps.length) {
+    let msg = '⚠️ Aucune opération valide.';
+    if (skipDate > 0) msg += ` ${skipDate} lignes sans date valide (colonne ${dateCol+1}).`;
+    if (skipLabel > 0) msg += ` ${skipLabel} lignes sans libellé (colonne ${labelCol+1}).`;
+    if (skipAmount > 0) msg += ` ${skipAmount} lignes sans montant.`;
+    toast(msg, 8000);
+    return;
+  }
   renderPasteStep3();
 });
 
