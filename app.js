@@ -2479,18 +2479,19 @@ document.getElementById('btn-paste-next').addEventListener('click', () => {
     let amount = 0, type = 'debit';
 
     // Déterminer le type depuis la colonne Type si elle existe
+    let typeFromCol = false;
     if (typeCol >= 0) {
       const typeRaw = (row[typeCol] || '').trim().toLowerCase();
-      if (/cr[ée]dit/.test(typeRaw)) type = 'credit';
-      else type = 'debit';
+      if (/cr[ée]dit/.test(typeRaw)) { type = 'credit'; typeFromCol = true; }
+      else { type = 'debit'; typeFromCol = true; }
     }
 
-    // Déterminer le montant
+    // Déterminer le montant (sans écraser le type si la colonne Type l'a défini)
     if (montantCol >= 0) {
       const val = parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
       if (val === 0) { skipAmount++; continue; }
       amount = Math.round(Math.abs(val));
-      type = val < 0 ? 'debit' : 'credit';
+      if (!typeFromCol) type = val < 0 ? 'debit' : 'credit';
     } else if (debitCol >= 0 && creditCol >= 0) {
       const dRaw = (row[debitCol] || '').trim();
       const cRaw = (row[creditCol] || '').trim();
