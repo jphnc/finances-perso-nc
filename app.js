@@ -421,6 +421,8 @@ function calcBillingBalance(accountName, refDate) {
   const ops = appData.operations.filter(op =>
     op.account === accountName &&
     op.opType !== 'Programmee' &&
+    op.opType !== 'Virement' &&
+    !(op.label && op.label.match(/^\[.+\]$/)) &&
     op.date >= startStr && op.date <= endStr
   );
   return ops.reduce((sum, op) =>
@@ -438,6 +440,8 @@ function getBillingInfo(accountName) {
   const ops = appData.operations.filter(op =>
     op.account === accountName &&
     op.opType !== 'Programmee' &&
+    op.opType !== 'Virement' &&
+    !(op.label && op.label.match(/^\[.+\]$/)) &&
     op.date >= startStr && op.date <= endStr
   );
 
@@ -463,6 +467,8 @@ function calcEncours(accountName, refDate) {
   const ops = appData.operations.filter(op =>
     op.account === accountName &&
     op.opType !== 'Programmee' &&
+    op.opType !== 'Virement' &&
+    !(op.label && op.label.match(/^\[.+\]$/)) &&
     op.type === 'debit' &&
     op.date >= cutoffStr && op.date <= endStr
   );
