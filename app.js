@@ -2294,6 +2294,197 @@ document.getElementById('form-scheduled').addEventListener('submit', async (e) =
   if (accessToken) uploadToDrive().catch(() => {});
 });
 
+// ── IMPORT PAR COLLAGE BANCAIRE ──────────────────────────────────────────────
+let pasteData = { rows: [], headers: [], colRoles: [], removedCols: [] };
+
+document.getElementById('btn-open-paste-import').addEventListener('click', () => {
+  document.getElementById('modal-paste-import').classList.remove('hidden');
+  document.getElementById('paste-step1').classList.remove('hidden');
+  document.getElementById('paste-step2').classList.add('hidden');
+  document.getElementById('paste-input').value = '';
+  const names = getAccountNames();
+  document.getElementById('paste-account').innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+});
+
+document.getElementById('btn-paste-cancel').addEventListener('click', () => {
+  document.getElementById('modal-paste-import').classList.add('hidden');
+});
+
+document.getElementById('btn-paste-parse').addEventListener('click', () => {
+  const raw = document.getElementById('paste-input').value.trim();
+  if (!raw) { toast('⚠️ Collez des données d\'abord'); return; }
+
+  // Détecter le séparateur (tab, point-virgule, virgule)
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  let sep = '\t';
+  if (lines[0].includes('\t')) sep = '\t';
+  else if (lines[0].includes(';')) sep = ';';
+  else if (lines[0].includes(',')) sep = ',';
+
+  const allRows = lines.map(l => l.split(sep).map(c => c.trim()));
+  const maxCols = Math.max(...allRows.map(r => r.length));
+
+  // Normaliser les lignes (même nombre de colonnes)
+  allRows.forEach(r => { while (r.length < maxCols) r.push(''); });
+
+  // Détecter si la première ligne est un header
+  const firstRow = allRows[0];
+  const hasHeader = firstRow.some(c => /date|libellé|label|montant|débit|crédit|description|ref/i.test(c));
+
+  if (hasHeader) {
+    pasteData.headers = firstRow;
+    pasteData.rows = allRows.slice(1);
+  } else {
+    pasteData.headers = firstRow.map((_, i) => `Colonne ${i + 1}`);
+    pasteData.rows = allRows;
+  }
+
+  // Auto-détecter les rôles des colonnes
+  pasteData.colRoles = pasteData.headers.map(h => {
+    const hl = h.toLowerCase();
+    if (/date/.test(hl)) return 'date';
+    if (/libellé|label|description|intitulé|désignation/.test(hl)) return 'label';
+    if (/débit|debit/.test(hl)) return 'debit';
+    if (/crédit|credit/.test(hl)) return 'credit';
+    if (/montant|somme|valeur/.test(hl)) return 'montant';
+    return '';
+  });
+
+  pasteData.removedCols = [];
+  renderPasteStep2();
+});
+
+function renderPasteStep2() {
+  document.getElementById('paste-step1').classList.add('hidden');
+  document.getElementById('paste-step2').classList.remove('hidden');
+
+  const roles = ['', 'date', 'label', 'debit', 'credit', 'montant', 'ignorer'];
+  const roleLabels = { '': '— Choisir —', date: '📅 Date', label: '📝 Libellé', debit: '🔴 Débit', credit: '🟢 Crédit', montant: '💰 Montant', ignorer: '⏭ Ignorer' };
+
+  // En-têtes avec sélecteur de rôle et bouton supprimer
+  const colsHtml = pasteData.headers.map((h, i) => {
+    if (pasteData.removedCols.includes(i)) return '';
+    const selOpts = roles.map(r => `<option value="${r}" ${pasteData.colRoles[i] === r ? 'selected' : ''}>${roleLabels[r]}</option>`).join('');
+    return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:0.78rem;display:flex;flex-direction:column;gap:4px;min-width:100px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b style="font-size:0.75rem">${h}</b>
+        <span onclick="removePasteCol(${i})" style="cursor:pointer;color:var(--danger);font-size:0.9rem">✕</span>
+      </div>
+      <select onchange="setPasteRole(${i},this.value)" style="padding:4px;font-size:0.75rem">${selOpts}</select>
+    </div>`;
+  }).join('');
+  document.getElementById('paste-columns').innerHTML = colsHtml;
+
+  // Aperçu tableau (5 premières lignes)
+  const visibleCols = pasteData.headers.map((_, i) => i).filter(i => !pasteData.removedCols.includes(i));
+  const previewRows = pasteData.rows.slice(0, 8);
+  const thHtml = visibleCols.map(i => `<th style="padding:4px 6px;font-size:0.7rem;white-space:nowrap;border-bottom:1px solid var(--border);color:var(--muted)">${pasteData.headers[i]}</th>`).join('');
+  const trHtml = previewRows.map(row =>
+    `<tr>${visibleCols.map(i => `<td style="padding:3px 6px;font-size:0.75rem;white-space:nowrap;border-bottom:1px solid var(--border)">${row[i] || ''}</td>`).join('')}</tr>`
+  ).join('');
+
+  document.getElementById('paste-preview').innerHTML = `
+    <table style="border-collapse:collapse;width:100%">
+      <thead><tr>${thHtml}</tr></thead>
+      <tbody>${trHtml}</tbody>
+    </table>`;
+
+  document.getElementById('paste-count').textContent = pasteData.rows.length;
+}
+
+window.removePasteCol = function(idx) {
+  pasteData.removedCols.push(idx);
+  renderPasteStep2();
+};
+
+window.setPasteRole = function(idx, role) {
+  // Un seul rôle par colonne (sauf ignorer)
+  if (role && role !== 'ignorer') {
+    pasteData.colRoles.forEach((r, i) => { if (r === role && i !== idx) pasteData.colRoles[i] = ''; });
+  }
+  pasteData.colRoles[idx] = role;
+  renderPasteStep2();
+};
+
+document.getElementById('btn-paste-back').addEventListener('click', () => {
+  document.getElementById('paste-step1').classList.remove('hidden');
+  document.getElementById('paste-step2').classList.add('hidden');
+});
+
+document.getElementById('btn-paste-import').addEventListener('click', () => {
+  const account = document.getElementById('paste-account').value;
+  const category = document.getElementById('paste-category').value;
+  if (!account) { toast('⚠️ Sélectionnez un compte'); return; }
+
+  const dateCol = pasteData.colRoles.indexOf('date');
+  const labelCol = pasteData.colRoles.indexOf('label');
+  const debitCol = pasteData.colRoles.indexOf('debit');
+  const creditCol = pasteData.colRoles.indexOf('credit');
+  const montantCol = pasteData.colRoles.indexOf('montant');
+
+  if (dateCol < 0) { toast('⚠️ Assignez une colonne Date'); return; }
+  if (labelCol < 0) { toast('⚠️ Assignez une colonne Libellé'); return; }
+  if (debitCol < 0 && creditCol < 0 && montantCol < 0) { toast('⚠️ Assignez une colonne Débit, Crédit ou Montant'); return; }
+
+  let imported = 0;
+  for (const row of pasteData.rows) {
+    // Parser la date
+    let dateStr = (row[dateCol] || '').trim();
+    const dm = dateStr.match(/(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
+    if (!dm) continue;
+    let [_, dd, mm, yy] = dm;
+    if (yy.length === 2) yy = '20' + yy;
+    dateStr = `${yy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+
+    const label = (row[labelCol] || '').trim();
+    if (!label) continue;
+
+    // Parser le montant
+    let amount = 0, type = 'debit';
+    if (debitCol >= 0 && creditCol >= 0) {
+      const dVal = parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+      const cVal = parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+      if (cVal > 0) { amount = Math.round(cVal); type = 'credit'; }
+      else if (dVal > 0) { amount = Math.round(dVal); type = 'debit'; }
+      else continue;
+    } else if (montantCol >= 0) {
+      const val = parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+      if (val === 0) continue;
+      amount = Math.round(Math.abs(val));
+      type = val > 0 ? 'credit' : 'debit';
+    } else if (debitCol >= 0) {
+      amount = Math.round(Math.abs(parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
+      if (!amount) continue;
+      type = 'debit';
+    } else if (creditCol >= 0) {
+      amount = Math.round(Math.abs(parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
+      if (!amount) continue;
+      type = 'credit';
+    }
+
+    appData.operations.push({
+      id: uid(),
+      date: dateStr,
+      label,
+      amount,
+      type,
+      account,
+      category,
+      opType: 'Operation',
+    });
+    imported++;
+  }
+
+  if (imported > 0) {
+    saveLocal();
+    renderAll();
+    document.getElementById('modal-paste-import').classList.add('hidden');
+    toast(`✅ ${imported} opérations importées dans ${account}`);
+  } else {
+    toast('⚠️ Aucune opération valide trouvée');
+  }
+});
+
 // ── POINTAGE ────────────────────────────────────────────────────────────────
 window.togglePointed = function(id) {
   const op = appData.operations.find(o => o.id === id);

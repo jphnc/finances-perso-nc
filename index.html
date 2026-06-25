@@ -345,6 +345,8 @@
       </div>
       <div id="sync-detail" style="font-size:0.78rem;color:var(--muted);margin-bottom:8px"></div>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Import depuis le site bancaire</p>
+      <button id="btn-open-paste-import" class="btn-primary" style="background:var(--accent);margin-bottom:8px">📋 Coller des opérations bancaires</button>
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Import données existantes</p>
       <button id="btn-import-bdu" class="btn-primary" style="background:var(--accent)">📂 Importer comptes_data.json</button>
       <div id="import-status" class="hidden" style="font-size:0.8rem;color:var(--accent);margin-top:8px;text-align:center"></div>
@@ -379,7 +381,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
       <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:6px"></p>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v56</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v57</p>
     </div>
   </div>
 
@@ -523,6 +525,51 @@
     <div class="modal-buttons">
       <button id="modal-passer-confirm" class="btn-primary">✅ Confirmer</button>
       <button id="modal-passer-cancel" class="btn-secondary">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import par collage bancaire -->
+<div id="modal-paste-import" class="modal hidden">
+  <div class="modal-content" style="max-width:95%;max-height:95vh">
+    <!-- Étape 1 : Coller -->
+    <div id="paste-step1">
+      <h3>Étape 1 — Coller les données</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px">Copiez les opérations depuis votre site bancaire et collez-les ici</p>
+      <textarea id="paste-input" rows="10" style="width:100%;font-size:0.8rem;font-family:monospace;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);resize:vertical" placeholder="Collez ici les données copiées depuis votre banque..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="btn-paste-parse" class="btn-primary" style="flex:1">Analyser ➡️</button>
+        <button id="btn-paste-cancel" class="btn-secondary" style="flex:0 0 auto">Annuler</button>
+      </div>
+    </div>
+
+    <!-- Étape 2 : Nettoyer les colonnes -->
+    <div id="paste-step2" class="hidden">
+      <h3>Étape 2 — Configurer les colonnes</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px">Cliquez sur ✕ pour supprimer une colonne inutile, puis assignez chaque colonne</p>
+      <div id="paste-columns" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="paste-preview" style="overflow-x:auto;margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <label style="flex:1;min-width:120px">Compte destination
+          <select id="paste-account"></select>
+        </label>
+        <label style="flex:1;min-width:120px">Catégorie par défaut
+          <select id="paste-category">
+            <option value="Autre">📦 Autre</option>
+            <option value="Alimentation">🛒 Alimentation</option>
+            <option value="Transport">🚗 Transport</option>
+            <option value="Sante">💊 Santé</option>
+            <option value="Loisirs">🎉 Loisirs</option>
+            <option value="Logement">🏠 Logement</option>
+            <option value="Telecom">📱 Telecom</option>
+            <option value="Revenus">💰 Revenus</option>
+          </select>
+        </label>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="btn-paste-back" class="btn-secondary" style="flex:0 0 auto">⬅️ Retour</button>
+        <button id="btn-paste-import" class="btn-primary" style="flex:1">✅ Importer <span id="paste-count"></span> opérations</button>
+      </div>
     </div>
   </div>
 </div>
