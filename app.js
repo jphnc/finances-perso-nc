@@ -631,12 +631,15 @@ function renderOperations() {
     list.innerHTML = displayOps.map(({ op, balance }) => {
       const sign = op.type === 'credit' ? '+' : '-';
       const balCol = balance >= 0 ? 'var(--accent)' : 'var(--danger)';
-      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer" onclick="editOp('${op.id}','${op.date}')">
+      const pointed = op.pointed ? 'opacity:0.5;' : '';
+      const checkIcon = op.pointed ? '✅' : '⬜';
+      const isProgrammee = op.opType === 'Programmee';
+      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer;${pointed}" onclick="editOp('${op.id}','${op.date}')">
         <div style="display:flex;align-items:center;gap:12px">
-          <span class="op-icon">${op.opType === 'Programmee' ? '🔁' : (CAT_ICONS[op.category] || '📦')}</span>
+          ${isProgrammee ? '<span class="op-icon">🔁</span>' : `<span class="op-check" onclick="event.stopPropagation();togglePointed('${op.id}')" style="font-size:1.1rem;cursor:pointer;padding:4px">${checkIcon}</span>`}
           <div class="op-info">
             <div class="op-label">${op.label}</div>
-            <div class="op-meta">${formatDate(op.date)} · ${op.category || ''}${op.opType === 'Programmee' ? ' · programmée' : ''}</div>
+            <div class="op-meta">${formatDate(op.date)} · ${op.category || ''}${isProgrammee ? ' · programmée' : ''}${op.pointed ? ' · ✓ pointée' : ''}</div>
           </div>
           <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
         </div>
@@ -666,8 +669,10 @@ function opHtml(op, showAccount = false) {
   const meta = showAccount
     ? `${formatDate(op.date)} · ${op.account || ''} · ${op.category}`
     : `${formatDate(op.date)} · ${op.category}`;
-  return `<li style="cursor:pointer" onclick="editOp('${op.id}','${op.date}')">
-    <span class="op-icon">${CAT_ICONS[op.category] || '📦'}</span>
+  const pointed = op.pointed ? 'opacity:0.5;' : '';
+  const checkIcon = op.pointed ? '✅' : '⬜';
+  return `<li style="cursor:pointer;${pointed}" onclick="editOp('${op.id}','${op.date}')">
+    <span class="op-check" onclick="event.stopPropagation();togglePointed('${op.id}')" style="font-size:1.1rem;cursor:pointer;padding:4px">${checkIcon}</span>
     <div class="op-info">
       <div class="op-label">${op.label}</div>
       <div class="op-meta">${meta}</div>
@@ -2288,6 +2293,16 @@ document.getElementById('form-scheduled').addEventListener('submit', async (e) =
   closeScheduledForm();
   if (accessToken) uploadToDrive().catch(() => {});
 });
+
+// ── POINTAGE ────────────────────────────────────────────────────────────────
+window.togglePointed = function(id) {
+  const op = appData.operations.find(o => o.id === id);
+  if (!op) return;
+  op.pointed = !op.pointed;
+  saveLocal();
+  renderOperations();
+  renderDashboard();
+};
 
 // ── MODIFICATION OPÉRATION ───────────────────────────────────────────────────
 let _editOpId = null;
