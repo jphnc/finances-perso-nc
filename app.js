@@ -2476,14 +2476,42 @@ document.getElementById('btn-paste-import').addEventListener('click', () => {
   }
 
   if (imported > 0) {
+    // Sauvegarder les IDs importés pour pouvoir annuler
+    const importedIds = appData.operations.slice(-imported).map(op => op.id);
+    localStorage.setItem('lastImportIds', JSON.stringify(importedIds));
+    localStorage.setItem('lastImportAccount', account);
+    localStorage.setItem('lastImportCount', imported);
+
     saveLocal();
     renderAll();
     document.getElementById('modal-paste-import').classList.add('hidden');
     toast(`✅ ${imported} opérations importées dans ${account}`);
+    showUndoImport(imported, account);
   } else {
     toast('⚠️ Aucune opération valide trouvée');
   }
 });
+
+function showUndoImport(count, account) {
+  const el = document.getElementById('toast');
+  el.innerHTML = `${count} ops importées dans ${account} — <a href="#" onclick="undoImport();return false" style="color:var(--danger);font-weight:700;text-decoration:underline">Annuler</a>`;
+  el.classList.remove('hidden');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.add('hidden'), 15000);
+}
+
+window.undoImport = function() {
+  const ids = JSON.parse(localStorage.getItem('lastImportIds') || '[]');
+  if (!ids.length) { toast('⚠️ Aucun import à annuler'); return; }
+  const count = ids.length;
+  appData.operations = appData.operations.filter(op => !ids.includes(op.id));
+  localStorage.removeItem('lastImportIds');
+  localStorage.removeItem('lastImportAccount');
+  localStorage.removeItem('lastImportCount');
+  saveLocal();
+  renderAll();
+  toast(`↩️ ${count} opérations supprimées`);
+};
 
 // ── POINTAGE ────────────────────────────────────────────────────────────────
 window.togglePointed = function(id) {
