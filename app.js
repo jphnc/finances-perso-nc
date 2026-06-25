@@ -2350,6 +2350,7 @@ document.getElementById('btn-paste-parse').addEventListener('click', () => {
     pasteData.colRoles = firstRow.map((val, i) => {
       // Détecter par le contenu
       if (/^\d{1,2}[/\-.]/.test(val)) return 'date';
+      if (/^d[ée]bit$/i.test(val) || /^cr[ée]dit$/i.test(val)) return 'typecol';
       const num = parseFloat(val.replace(/\s/g, '').replace(',', '.'));
       if (!isNaN(num) && num !== 0) {
         // Colonne numérique — deviner si débit ou crédit
@@ -2369,9 +2370,10 @@ document.getElementById('btn-paste-parse').addEventListener('click', () => {
     const hl = h.toLowerCase();
     if (/date/.test(hl)) return 'date';
     if (/libellé|label|description|intitulé|désignation/.test(hl)) return 'label';
-    if (/débit|debit/.test(hl)) return 'debit';
-    if (/crédit|credit/.test(hl)) return 'credit';
+    if (/^débit$|^debit$/.test(hl)) return 'debit';
+    if (/^crédit$|^credit$/.test(hl)) return 'credit';
     if (/montant|somme|valeur/.test(hl)) return 'montant';
+    if (/type|sens|opération/.test(hl)) return 'typecol';
     return '';
   });
 
@@ -2383,8 +2385,8 @@ function renderPasteStep2() {
   document.getElementById('paste-step1').classList.add('hidden');
   document.getElementById('paste-step2').classList.remove('hidden');
 
-  const roles = ['', 'date', 'label', 'debit', 'credit', 'montant', 'ignorer'];
-  const roleLabels = { '': '— Choisir —', date: '📅 Date', label: '📝 Libellé', debit: '🔴 Débit', credit: '🟢 Crédit', montant: '💰 Montant', ignorer: '⏭ Ignorer' };
+  const roles = ['', 'date', 'label', 'debit', 'credit', 'montant', 'typecol', 'ignorer'];
+  const roleLabels = { '': '— Choisir —', date: '📅 Date', label: '📝 Libellé', debit: '🔴 Débit', credit: '🟢 Crédit', montant: '💰 Montant', typecol: '↕️ Type (Débit/Crédit)', ignorer: '⏭ Ignorer' };
 
   // En-têtes avec sélecteur de rôle et bouton supprimer
   const colsHtml = pasteData.headers.map((h, i) => {
@@ -2455,6 +2457,8 @@ document.getElementById('btn-paste-next').addEventListener('click', () => {
   const creditCol = pasteData.colRoles.indexOf('credit');
   const montantCol = pasteData.colRoles.indexOf('montant');
 
+  const typeCol = pasteData.colRoles.indexOf('typecol');
+
   if (dateCol < 0) { toast('⚠️ Assignez une colonne Date'); return; }
   if (labelCol < 0) { toast('⚠️ Assignez une colonne Libellé'); return; }
   if (debitCol < 0 && creditCol < 0 && montantCol < 0) { toast('⚠️ Assignez une colonne Débit, Crédit ou Montant'); return; }
@@ -2473,28 +2477,62 @@ document.getElementById('btn-paste-next').addEventListener('click', () => {
     if (!label) { skipLabel++; continue; }
 
     let amount = 0, type = 'debit';
-    if (debitCol >= 0 && creditCol >= 0) {
-      const dVal = parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
-      const cVal = parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
-      if (cVal > 0) { amount = Math.round(cVal); type = 'credit'; }
-      else if (dVal > 0) { amount = Math.round(dVal); type = 'debit'; }
-      else { skipAmount++; continue; }
-    } else if (montantCol >= 0) {
+
+    // Déterminer le type depuis la colonne Type si elle existe
+    if (typeCol >= 0) {
+      const typeRaw = (row[typeCol] || '').trim().toLowerCase();
+      if (/cr[ée]dit/.test(typeRaw)) type = 'credit';
+      else type = 'debit';
+    }
+
+    // Déterminer le montant
+    if (montantCol >= 0) {
       const val = parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
       if (val === 0) { skipAmount++; continue; }
       amount = Math.round(Math.abs(val));
-      type = val > 0 ? 'credit' : 'debit';
+      type = val < 0 ? 'debit' : 'credit';
+    } else if (debitCol >= 0 && creditCol >= 0) {
+      const dRaw = (row[debitCol] || '').trim();
+      const cRaw = (row[creditCol] || '').trim();
+      const dVal = parseFloat(dRaw.replace(/\s/g, '').replace(',', '.')) || 0;
+      const cVal = parseFloat(cRaw.replace(/\s/g, '').replace(',', '.')) || 0;
+      if (cVal > 0) { amount = Math.round(cVal); type = 'credit'; }
+      else if (dVal > 0) { amount = Math.round(dVal); type = 'debit'; }
+      else { skipAmount++; continue; }
     } else if (debitCol >= 0) {
-      amount = Math.round(Math.abs(parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
+      const dRaw = (row[debitCol] || '').trim();
+      // Si la colonne contient "Débit"/"Crédit" (texte), chercher le montant ailleurs
+      if (/d[ée]bit/i.test(dRaw)) {
+        type = 'debit';
+        // Chercher le montant dans la colonne montant ou une autre colonne numérique
+        if (montantCol >= 0) {
+          amount = Math.round(Math.abs(parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
+        }
+      } else if (/cr[ée]dit/i.test(dRaw)) {
+        type = 'credit';
+        if (montantCol >= 0) {
+          amount = Math.round(Math.abs(parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
+        }
+      } else {
+        amount = Math.round(Math.abs(parseFloat(dRaw.replace(/\s/g, '').replace(',', '.')) || 0));
+        type = 'debit';
+      }
       if (!amount) { skipAmount++; continue; }
-      type = 'debit';
     } else if (creditCol >= 0) {
       amount = Math.round(Math.abs(parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
       if (!amount) { skipAmount++; continue; }
       type = 'credit';
     }
 
-    parsedOps.push({ date: dateStr, label, amount, type, category: defaultCat });
+    // Vérification doublon : même date + même montant + même compte
+    const isDuplicate = appData.operations.some(op =>
+      op.account === account &&
+      op.date === dateStr &&
+      op.amount === amount &&
+      op.label.toLowerCase().includes(label.substring(0, 10).toLowerCase())
+    );
+
+    parsedOps.push({ date: dateStr, label, amount, type, category: defaultCat, duplicate: isDuplicate });
   }
 
   if (!parsedOps.length) {
@@ -2515,18 +2553,24 @@ function renderPasteStep3() {
   const catOptions = ['Alimentation','Transport','Sante','Loisirs','Logement','Telecom','Revenus','Autre','Virement']
     .map(c => `<option value="${c}">${CAT_ICONS[c] || '📦'} ${c}</option>`).join('');
 
+  const dupeCount = parsedOps.filter(op => op.duplicate).length;
+  const dupeWarning = dupeCount > 0 ? `<div style="background:var(--warning);color:white;padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:0.82rem">⚠️ ${dupeCount} doublon(s) détecté(s) — décochez pour les exclure</div>` : '';
+
   const rows = parsedOps.map((op, i) => {
     const sign = op.type === 'credit' ? '+' : '-';
     const col = op.type === 'credit' ? 'var(--accent)' : 'var(--danger)';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
-      <span style="font-size:0.78rem;color:var(--muted);min-width:70px">${formatDate(op.date)}</span>
-      <span style="flex:1;font-size:0.85rem;font-weight:600;min-width:100px">${op.label}</span>
-      <span style="font-weight:700;color:${col};font-size:0.9rem;min-width:80px;text-align:right">${sign}${fmt(op.amount)}</span>
-      <select onchange="parsedOps[${i}].category=this.value" style="padding:4px 6px;font-size:0.78rem;min-width:100px">${catOptions.replace(`value="${op.category}"`, `value="${op.category}" selected`)}</select>
+    const dupeStyle = op.duplicate ? 'background:rgba(239,108,0,0.1);border-left:3px solid var(--warning);' : '';
+    const checked = op.skip ? '' : 'checked';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--border);flex-wrap:wrap;${dupeStyle}">
+      <input type="checkbox" ${checked} onchange="parsedOps[${i}].skip=!this.checked" style="width:18px;height:18px;accent-color:var(--primary)"/>
+      <span style="font-size:0.78rem;color:var(--muted);min-width:65px">${formatDate(op.date)}</span>
+      <span style="flex:1;font-size:0.82rem;font-weight:600;min-width:80px">${op.label}${op.duplicate ? ' <span style="color:var(--warning);font-size:0.72rem">⚠️ doublon</span>' : ''}</span>
+      <span style="font-weight:700;color:${col};font-size:0.85rem;min-width:70px;text-align:right">${sign}${fmt(op.amount)}</span>
+      <select onchange="parsedOps[${i}].category=this.value" style="padding:4px 6px;font-size:0.75rem;min-width:90px">${catOptions.replace(`value="${op.category}"`, `value="${op.category}" selected`)}</select>
     </div>`;
   }).join('');
 
-  document.getElementById('paste-review').innerHTML = rows;
+  document.getElementById('paste-review').innerHTML = dupeWarning + rows;
   document.getElementById('paste-count').textContent = parsedOps.length;
 }
 
@@ -2547,6 +2591,7 @@ document.getElementById('btn-paste-import').addEventListener('click', () => {
 
   let imported = 0;
   for (const op of parsedOps) {
+    if (op.skip) continue;
     appData.operations.push({
       id: uid(),
       date: op.date,
