@@ -385,7 +385,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
       <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:6px"></p>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v70</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v71</p>
     </div>
   </div>
 
@@ -540,14 +540,16 @@
     <div id="paste-step1">
       <h3>Étape 1 — Coller les données</h3>
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px">Copiez les opérations depuis votre site bancaire et collez-les ici</p>
-      <textarea id="paste-input" rows="10" style="width:100%;font-size:0.8rem;font-family:monospace;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);resize:vertical" placeholder="Collez ici les données copiées depuis votre banque..."></textarea>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-        <label style="font-size:0.8rem;color:var(--muted);white-space:nowrap;margin:0">Ignorer les
-          <input type="number" id="paste-skip-rows" min="0" value="0" style="width:45px;padding:4px;text-align:center;font-size:0.85rem" inputmode="numeric"/>
-          premières lignes</label>
+      <textarea id="paste-input" rows="8" style="width:100%;font-size:0.8rem;font-family:monospace;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);resize:vertical" placeholder="Collez ici les données copiées depuis votre banque..."></textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <label style="font-size:0.8rem;color:var(--muted);white-space:nowrap;margin:0">Ignorer
+          <input type="number" id="paste-skip-rows" min="0" value="0" style="width:40px;padding:4px;text-align:center;font-size:0.85rem" inputmode="numeric"/>
+          lignes</label>
+        <button id="btn-paste-add" class="btn-secondary" style="flex:0 0 auto;padding:8px 12px;font-size:0.85rem">➕ Ajouter un collage</button>
         <button id="btn-paste-parse" class="btn-primary" style="flex:1">Analyser ➡️</button>
         <button id="btn-paste-cancel" class="btn-secondary" style="flex:0 0 auto">Annuler</button>
       </div>
+      <div id="paste-batches" style="margin-top:8px;font-size:0.8rem;color:var(--muted)"></div>
     </div>
 
     <!-- Étape 2 : Nettoyer les colonnes -->

@@ -2305,15 +2305,38 @@ document.getElementById('form-scheduled').addEventListener('submit', async (e) =
 
 // ── IMPORT PAR COLLAGE BANCAIRE ──────────────────────────────────────────────
 let pasteData = { rows: [], headers: [], colRoles: [], removedCols: [] };
+let pasteBatches = []; // stocke les collages multiples
 
 document.getElementById('btn-open-paste-import').addEventListener('click', () => {
   document.getElementById('modal-paste-import').classList.remove('hidden');
   document.getElementById('paste-step1').classList.remove('hidden');
   document.getElementById('paste-step2').classList.add('hidden');
+  document.getElementById('paste-step3').classList.add('hidden');
   document.getElementById('paste-input').value = '';
+  pasteBatches = [];
+  updateBatchesDisplay();
   const names = getAccountNames();
   document.getElementById('paste-account').innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
 });
+
+// Ajouter un collage à la pile
+document.getElementById('btn-paste-add').addEventListener('click', () => {
+  const raw = document.getElementById('paste-input').value.trim();
+  if (!raw) { toast('⚠️ Collez des données d\'abord'); return; }
+  const skipRows = parseInt(document.getElementById('paste-skip-rows').value) || 0;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean).slice(skipRows);
+  pasteBatches.push(lines);
+  document.getElementById('paste-input').value = '';
+  updateBatchesDisplay();
+  toast(`✅ Collage ${pasteBatches.length} ajouté (${lines.length} lignes)`);
+});
+
+function updateBatchesDisplay() {
+  const el = document.getElementById('paste-batches');
+  if (!pasteBatches.length) { el.textContent = ''; return; }
+  const total = pasteBatches.reduce((s, b) => s + b.length, 0);
+  el.innerHTML = `📋 ${pasteBatches.length} collage(s) en attente — ${total} lignes au total`;
+}
 
 document.getElementById('btn-paste-cancel').addEventListener('click', () => {
   if (!confirm('Quitter l\'import ? Les données collées seront conservées.')) return;
@@ -2321,12 +2344,17 @@ document.getElementById('btn-paste-cancel').addEventListener('click', () => {
 });
 
 document.getElementById('btn-paste-parse').addEventListener('click', () => {
+  // Ajouter le collage actuel s'il y en a un
   const raw = document.getElementById('paste-input').value.trim();
-  if (!raw) { toast('⚠️ Collez des données d\'abord'); return; }
+  if (raw) {
+    const skipRows = parseInt(document.getElementById('paste-skip-rows').value) || 0;
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean).slice(skipRows);
+    pasteBatches.push(lines);
+  }
+  if (!pasteBatches.length) { toast('⚠️ Collez des données d\'abord'); return; }
 
-  // Détecter le séparateur (tab, point-virgule, virgule)
-  const skipRows = parseInt(document.getElementById('paste-skip-rows').value) || 0;
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean).slice(skipRows);
+  // Fusionner tous les collages
+  const lines = pasteBatches.flat();
   let sep = '\t';
   if (lines[0].includes('\t')) sep = '\t';
   else if (lines[0].includes(';')) sep = ';';
@@ -2539,10 +2567,20 @@ document.getElementById('btn-paste-next').addEventListener('click', () => {
       op.account === account &&
       op.date === dateStr &&
       op.amount === amount &&
-      op.label.toLowerCase().includes(label.substring(0, 10).toLowerCase())
+      op.type === type
     );
 
-    parsedOps.push({ date: dateStr, label, amount, type, category: defaultCat, duplicate: isDuplicate });
+    // Vérification doublon dans le lot actuel (collage en double)
+    const isDuplicateInBatch = parsedOps.some(op =>
+      op.date === dateStr &&
+      op.amount === amount &&
+      op.type === type &&
+      op.label === label
+    );
+
+    if (isDuplicateInBatch) continue; // doublon dans le même collage → ignorer silencieusement
+
+    parsedOps.push({ date: dateStr, label, amount, type, category: defaultCat, duplicate: isDuplicate, skip: isDuplicate });
   }
 
   if (!parsedOps.length) {
@@ -2564,7 +2602,8 @@ function renderPasteStep3() {
     .map(c => `<option value="${c}">${CAT_ICONS[c] || '📦'} ${c}</option>`).join('');
 
   const dupeCount = parsedOps.filter(op => op.duplicate).length;
-  const dupeWarning = dupeCount > 0 ? `<div style="background:var(--warning);color:white;padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:0.82rem">⚠️ ${dupeCount} doublon(s) détecté(s) — décochez pour les exclure</div>` : '';
+  const activeCount = parsedOps.filter(op => !op.skip).length;
+  const dupeWarning = dupeCount > 0 ? `<div style="background:var(--warning);color:white;padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:0.82rem">⚠️ ${dupeCount} doublon(s) détecté(s) et exclu(s) — recochez pour les inclure</div>` : '';
 
   const rows = parsedOps.map((op, i) => {
     const sign = op.type === 'credit' ? '+' : '-';
