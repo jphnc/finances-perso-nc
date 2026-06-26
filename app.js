@@ -2848,10 +2848,15 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
   }
 
   saveLocal();
+  // Conserver le compte et le mois actif
+  const currentFilter = document.getElementById('filter-account').value;
   renderAll();
+  if (currentFilter) {
+    document.getElementById('filter-account').value = currentFilter;
+    renderOperations();
+  }
   document.getElementById('modal-edit-op').classList.add('hidden');
   _editOpId = null;
-  if (accessToken) uploadToDrive().catch(() => {});
 });
 
 document.getElementById('edit-op-delete').addEventListener('click', () => {
