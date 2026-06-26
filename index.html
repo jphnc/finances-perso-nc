@@ -159,9 +159,11 @@
       </div>
       <button id="btn-ops-month-next" class="icon-btn" style="font-size:1.1rem;padding:4px">▶</button>
     </div>
-    <div style="margin-bottom:10px">
-      <input type="search" id="filter-search" placeholder="🔍 Rechercher un libellé…"
-        style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:0.9rem;background:var(--bg);color:var(--text);outline:none"/>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="search" id="filter-search" placeholder="🔍 Libellé…"
+        style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:0.9rem;background:var(--bg);color:var(--text);outline:none"/>
+      <input type="number" id="filter-amount" placeholder="💰 Montant" inputmode="numeric"
+        style="width:110px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:0.9rem;background:var(--bg);color:var(--text);outline:none"/>
     </div>
     <div class="filter-bar" style="flex-wrap:wrap">
       <select id="filter-account" style="flex:1;min-width:120px">
@@ -381,7 +383,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
       <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:6px"></p>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v65</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v68</p>
     </div>
   </div>
 
