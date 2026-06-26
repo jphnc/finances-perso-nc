@@ -2478,52 +2478,41 @@ document.getElementById('btn-paste-next').addEventListener('click', () => {
 
     let amount = 0, type = 'debit';
 
-    // Déterminer le type depuis la colonne Type si elle existe
+    // Déterminer le type depuis toute colonne contenant "Débit"/"Crédit" (texte)
     let typeFromCol = false;
-    if (typeCol >= 0) {
-      const typeRaw = (row[typeCol] || '').trim().toLowerCase();
-      if (/cr[ée]dit/.test(typeRaw)) { type = 'credit'; typeFromCol = true; }
-      else { type = 'debit'; typeFromCol = true; }
-    }
+    const checkTypeText = (colIdx) => {
+      if (colIdx < 0) return;
+      const raw = (row[colIdx] || '').trim().toLowerCase();
+      if (/cr[ée]dit/.test(raw)) { type = 'credit'; typeFromCol = true; }
+      else if (/d[ée]bit/.test(raw)) { type = 'debit'; typeFromCol = true; }
+    };
+    checkTypeText(typeCol);
+    if (!typeFromCol) checkTypeText(debitCol);
+    if (!typeFromCol) checkTypeText(creditCol);
 
-    // Déterminer le montant (sans écraser le type si la colonne Type l'a défini)
+    // Déterminer le montant
     if (montantCol >= 0) {
       const val = parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
       if (val === 0) { skipAmount++; continue; }
       amount = Math.round(Math.abs(val));
       if (!typeFromCol) type = val < 0 ? 'debit' : 'credit';
     } else if (debitCol >= 0 && creditCol >= 0) {
-      const dRaw = (row[debitCol] || '').trim();
-      const cRaw = (row[creditCol] || '').trim();
-      const dVal = parseFloat(dRaw.replace(/\s/g, '').replace(',', '.')) || 0;
-      const cVal = parseFloat(cRaw.replace(/\s/g, '').replace(',', '.')) || 0;
-      if (cVal > 0) { amount = Math.round(cVal); type = 'credit'; }
-      else if (dVal > 0) { amount = Math.round(dVal); type = 'debit'; }
+      const dVal = parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+      const cVal = parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+      if (cVal > 0) { amount = Math.round(cVal); if (!typeFromCol) type = 'credit'; }
+      else if (dVal > 0) { amount = Math.round(dVal); if (!typeFromCol) type = 'debit'; }
+      else if (typeFromCol && montantCol < 0) { skipAmount++; continue; }
       else { skipAmount++; continue; }
-    } else if (debitCol >= 0) {
-      const dRaw = (row[debitCol] || '').trim();
-      // Si la colonne contient "Débit"/"Crédit" (texte), chercher le montant ailleurs
-      if (/d[ée]bit/i.test(dRaw)) {
-        type = 'debit';
-        // Chercher le montant dans la colonne montant ou une autre colonne numérique
-        if (montantCol >= 0) {
-          amount = Math.round(Math.abs(parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
-        }
-      } else if (/cr[ée]dit/i.test(dRaw)) {
-        type = 'credit';
-        if (montantCol >= 0) {
-          amount = Math.round(Math.abs(parseFloat((row[montantCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
-        }
-      } else {
-        amount = Math.round(Math.abs(parseFloat(dRaw.replace(/\s/g, '').replace(',', '.')) || 0));
-        type = 'debit';
-      }
-      if (!amount) { skipAmount++; continue; }
-    } else if (creditCol >= 0) {
-      amount = Math.round(Math.abs(parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0));
-      if (!amount) { skipAmount++; continue; }
-      type = 'credit';
+    } else if (debitCol >= 0 && !typeFromCol) {
+      const dVal = parseFloat((row[debitCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+      if (dVal > 0) { amount = Math.round(dVal); type = 'debit'; }
+      else { skipAmount++; continue; }
+    } else if (creditCol >= 0 && !typeFromCol) {
+      const cVal = parseFloat((row[creditCol] || '').replace(/\s/g, '').replace(',', '.')) || 0;
+      if (cVal > 0) { amount = Math.round(cVal); type = 'credit'; }
+      else { skipAmount++; continue; }
     }
+    if (!amount) { skipAmount++; continue; }
 
     // Vérification doublon : même date + même montant + même compte
     const isDuplicate = appData.operations.some(op =>
