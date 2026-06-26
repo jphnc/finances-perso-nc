@@ -592,7 +592,7 @@ function renderOperations() {
   let ops = [...appData.operations].sort((a, b) => a.date.localeCompare(b.date));
   if (accFilter)  ops = ops.filter(op => op.account === accFilter);
   if (typeFilter) ops = ops.filter(op => op.type === typeFilter);
-  if (catFilter)  ops = ops.filter(op => op.category === catFilter);
+  if (catFilter)  ops = ops.filter(op => op.category === catFilter || (op.category && op.category.startsWith(catFilter + '/')));
   if (search)     ops = ops.filter(op => op.label.toLowerCase().includes(search));
   if (amountMin && amountMax) ops = ops.filter(op => op.amount >= amountMin && op.amount <= amountMax);
   else if (amountMin) ops = ops.filter(op => op.amount >= amountMin);
@@ -711,9 +711,11 @@ function renderAll() {
   updateSyncStatus();
   renderBackupList();
   renderAccountsConfig();
+  renderSubcategoriesConfig();
   renderBudgetsConfig();
   renderAlertsConfig();
   populateExportAccount();
+  updateCategorySelects();
   updatePwdStatus();
   populateTotalAccountsConfig();
   populateCardConfig();
@@ -1011,6 +1013,98 @@ function populateTotalAccountsConfig() {
       if (accessToken) uploadToDrive().catch(() => {});
     });
   });
+}
+
+// ── SOUS-CATÉGORIES ─────────────────────────────────────────────────────────
+const MAIN_CATEGORIES = ['Alimentation','Transport','Sante','Loisirs','Logement','Telecom','Revenus','Autre'];
+
+function getSubcategories() {
+  return appData.subcategories || {};
+}
+
+function getAllCategoryOptions() {
+  const subs = getSubcategories();
+  let html = '';
+  for (const cat of MAIN_CATEGORIES) {
+    html += `<option value="${cat}">${CAT_ICONS[cat] || '📦'} ${cat}</option>`;
+    if (subs[cat]) {
+      for (const sub of subs[cat]) {
+        html += `<option value="${cat}/${sub}">  ↳ ${sub}</option>`;
+      }
+    }
+  }
+  html += '<option value="Virement">Virement</option>';
+  return html;
+}
+
+function renderSubcategoriesConfig() {
+  const subs = getSubcategories();
+  const container = document.getElementById('cfg-subcategories');
+  let html = '';
+  for (const cat of MAIN_CATEGORIES) {
+    if (!subs[cat] || !subs[cat].length) continue;
+    html += `<div style="margin-bottom:6px"><span style="font-size:0.85rem;font-weight:600">${CAT_ICONS[cat] || '📦'} ${cat}</span>`;
+    html += `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">`;
+    for (const sub of subs[cat]) {
+      html += `<span style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:0.78rem;display:flex;align-items:center;gap:4px">${sub}<span onclick="removeSubcat('${cat}','${sub.replace(/'/g,"\\'")}')" style="cursor:pointer;color:var(--danger);font-weight:700">✕</span></span>`;
+    }
+    html += `</div></div>`;
+  }
+  container.innerHTML = html || '<span style="font-size:0.82rem;color:var(--muted)">Aucune sous-catégorie</span>';
+
+  const parentSel = document.getElementById('cfg-subcat-parent');
+  parentSel.innerHTML = MAIN_CATEGORIES.map(c => `<option value="${c}">${CAT_ICONS[c] || '📦'} ${c}</option>`).join('');
+}
+
+document.getElementById('btn-add-subcat').addEventListener('click', () => {
+  const parent = document.getElementById('cfg-subcat-parent').value;
+  const name = document.getElementById('cfg-subcat-name').value.trim();
+  if (!name) { toast('⚠️ Nom requis'); return; }
+  if (!appData.subcategories) appData.subcategories = {};
+  if (!appData.subcategories[parent]) appData.subcategories[parent] = [];
+  if (appData.subcategories[parent].includes(name)) { toast('⚠️ Existe déjà'); return; }
+  appData.subcategories[parent].push(name);
+  document.getElementById('cfg-subcat-name').value = '';
+  saveLocal();
+  renderAll();
+  toast(`✅ ${parent}/${name} ajouté`);
+});
+
+window.removeSubcat = function(parent, name) {
+  if (!appData.subcategories || !appData.subcategories[parent]) return;
+  appData.subcategories[parent] = appData.subcategories[parent].filter(s => s !== name);
+  if (!appData.subcategories[parent].length) delete appData.subcategories[parent];
+  saveLocal();
+  renderAll();
+  toast(`🗑 ${parent}/${name} supprimé`);
+};
+
+function updateCategorySelects() {
+  const opts = getAllCategoryOptions();
+  const filterOpts = '<option value="">Toutes catégories</option>' + opts;
+  ['inp-category', 'edit-op-category', 'sch-category', 'paste-category'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      const cur = el.value;
+      el.innerHTML = opts;
+      if (cur) el.value = cur;
+    }
+  });
+  const filterEl = document.getElementById('filter-category');
+  if (filterEl) {
+    const cur = filterEl.value;
+    filterEl.innerHTML = filterOpts;
+    if (cur) filterEl.value = cur;
+  }
+}
+
+function getCategoryDisplay(cat) {
+  if (!cat) return '';
+  if (cat.includes('/')) {
+    const [parent, sub] = cat.split('/');
+    return `${CAT_ICONS[parent] || '📦'} ${sub}`;
+  }
+  return cat;
 }
 
 // ── BUDGETS PAR CATÉGORIE ────────────────────────────────────────────────────
@@ -1617,7 +1711,8 @@ function renderStats() {
   // Top catégories (dépenses)
   const bycat = {};
   ops.filter(o => o.type === 'debit').forEach(o => {
-    bycat[o.category] = (bycat[o.category] || 0) + o.amount;
+    const cat = o.category && o.category.includes('/') ? o.category.split('/')[0] : (o.category || 'Autre');
+    bycat[cat] = (bycat[cat] || 0) + o.amount;
   });
   const sorted = Object.entries(bycat).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxVal = sorted[0]?.[1] || 1;

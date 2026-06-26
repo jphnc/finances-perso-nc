@@ -316,6 +316,14 @@
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Comptes inclus dans le solde total</p>
       <div id="cfg-total-accounts" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Sous-catégories</p>
+      <div id="cfg-subcategories" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <select id="cfg-subcat-parent" style="flex:1"></select>
+        <input type="text" id="cfg-subcat-name" placeholder="Nom de la sous-catégorie" style="flex:1"/>
+        <button id="btn-add-subcat" class="btn-primary" style="flex:0 0 auto;padding:10px 14px;background:var(--accent)">+</button>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Budgets mensuels par catégorie</p>
       <div id="cfg-budgets" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
       <button id="btn-save-budgets" class="btn-primary" style="background:var(--accent)">💾 Enregistrer les budgets</button>
@@ -385,7 +393,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
       <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:6px"></p>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v71</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v72</p>
     </div>
   </div>
 
