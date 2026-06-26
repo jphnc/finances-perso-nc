@@ -570,12 +570,13 @@ function renderOperations() {
   const typeFilter = document.getElementById('filter-type').value;
   const catFilter  = document.getElementById('filter-category').value;
   const search     = document.getElementById('filter-search').value.trim().toLowerCase();
-  const amountSearch = parseInt(document.getElementById('filter-amount').value) || 0;
+  const amountMin = parseInt(document.getElementById('filter-amount-min').value) || 0;
+  const amountMax = parseInt(document.getElementById('filter-amount-max').value) || 0;
   const dateFrom   = document.getElementById('filter-date-from').value;
   const dateTo     = document.getElementById('filter-date-to').value;
 
   const monthNav = document.getElementById('ops-month-nav');
-  const useMonthView = !!accFilter && !search && !amountSearch && !dateFrom && !dateTo && !typeFilter && !catFilter;
+  const useMonthView = !!accFilter && !search && !amountMin && !amountMax && !dateFrom && !dateTo && !typeFilter && !catFilter;
 
   if (useMonthView) {
     monthNav.style.display = 'flex';
@@ -593,7 +594,9 @@ function renderOperations() {
   if (typeFilter) ops = ops.filter(op => op.type === typeFilter);
   if (catFilter)  ops = ops.filter(op => op.category === catFilter);
   if (search)     ops = ops.filter(op => op.label.toLowerCase().includes(search));
-  if (amountSearch) ops = ops.filter(op => op.amount === amountSearch);
+  if (amountMin && amountMax) ops = ops.filter(op => op.amount >= amountMin && op.amount <= amountMax);
+  else if (amountMin) ops = ops.filter(op => op.amount >= amountMin);
+  else if (amountMax) ops = ops.filter(op => op.amount <= amountMax);
 
   if (useMonthView) {
     // Solde de fin de mois = calcul direct (même fonction que la projection)
@@ -728,12 +731,14 @@ window.filterByAccount = function(name) {
 ['filter-account','filter-type','filter-category','filter-date-from','filter-date-to'].forEach(id =>
   document.getElementById(id).addEventListener('change', renderOperations));
 document.getElementById('filter-search').addEventListener('input', renderOperations);
-document.getElementById('filter-amount').addEventListener('input', renderOperations);
+document.getElementById('filter-amount-min').addEventListener('input', renderOperations);
+document.getElementById('filter-amount-max').addEventListener('input', renderOperations);
 document.getElementById('btn-filter-reset').addEventListener('click', () => {
   ['filter-account','filter-type','filter-category','filter-date-from','filter-date-to'].forEach(id =>
     document.getElementById(id).value = '');
   document.getElementById('filter-search').value = '';
-  document.getElementById('filter-amount').value = '';
+  document.getElementById('filter-amount-min').value = '';
+  document.getElementById('filter-amount-max').value = '';
   opsMonth = new Date().getMonth();
   opsYear  = new Date().getFullYear();
   renderOperations();
