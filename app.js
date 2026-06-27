@@ -352,8 +352,13 @@ async function syncFromDrive() {
     showScreen('screen-main');
     updateSyncStatus();
   } catch (e) {
-    toast('⚠️ ' + e.message);
-    document.getElementById('sync-status').textContent = '⚠️ Erreur sync';
+    console.warn('Sync erreur:', e.message);
+    // Ne pas afficher l'erreur dans le bandeau bleu si on a des données locales
+    if (appData.lastSync) {
+      updateSyncStatus();
+    } else {
+      document.getElementById('sync-status').textContent = 'Non synchronisé';
+    }
   }
 }
 function updateSyncStatus() {
