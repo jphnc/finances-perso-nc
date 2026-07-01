@@ -1860,7 +1860,7 @@ function calcBalanceAtDate(accountFilter, year, month, cutDay) {
       op.account === accountFilter && op.opType !== 'Programmee' && op.date <= cutDate);
     let bal = initial + realOps.reduce((s, op) =>
       op.type === 'credit' ? s + op.amount : s - op.amount, 0);
-    for (let m = currentMonth + 1; m <= targetMonth; m++) {
+    for (let m = currentMonth; m <= targetMonth; m++) {
       const y2 = Math.floor(m/12), m2 = m%12;
       const schOps = scheduledOpsInMonth(y2, m2, accountFilter);
       let mCut;
