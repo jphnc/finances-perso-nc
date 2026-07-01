@@ -379,25 +379,21 @@ const CAT_ICONS = {
 };
 
 function calcAccountBalance(accountName, maxDate) {
-  const acc = appData.accounts.find(a => a.name === accountName);
-  const initial = acc ? (acc.initialBalance || 0) : 0;
-  let cutoff;
   if (maxDate) {
-    cutoff = maxDate;
-  } else {
-    const now = new Date();
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    cutoff = `${endOfMonth.getFullYear()}-${String(endOfMonth.getMonth()+1).padStart(2,'0')}-${String(endOfMonth.getDate()).padStart(2,'0')}`;
+    // Cas avec date précise (ex: impression, historique) : calcul direct sans ops programmées
+    const acc = appData.accounts.find(a => a.name === accountName);
+    const initial = acc ? (acc.initialBalance || 0) : 0;
+    const ops = appData.operations.filter(op =>
+      (!accountName || op.account === accountName) &&
+      op.opType !== 'Programmee' &&
+      op.date <= maxDate
+    );
+    return initial + ops.reduce((sum, op) =>
+      op.type === 'credit' ? sum + op.amount : sum - op.amount, 0);
   }
-
-  const ops = appData.operations.filter(op =>
-    (!accountName || op.account === accountName) &&
-    op.opType !== 'Programmee' &&
-    op.date <= cutoff
-  );
-
-  return initial + ops.reduce((sum, op) =>
-    op.type === 'credit' ? sum + op.amount : sum - op.amount, 0);
+  // Cas par défaut : solde de fin de mois courant, cohérent avec la vue Opérations
+  const now = new Date();
+  return calcBalanceEndOfMonth(accountName, now.getFullYear(), now.getMonth());
 }
 
 // ── DÉBIT DIFFÉRÉ ───────────────────────────────────────────────────────────
