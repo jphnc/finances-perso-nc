@@ -2931,7 +2931,7 @@ document.getElementById('edit-op-cancel').addEventListener('click', () => {
 });
 
 document.getElementById('edit-op-confirm').addEventListener('click', () => {
-  const op = appData.operations.find(o => o.id === _editOpId);
+  let op = appData.operations.find(o => o.id === _editOpId);
   if (!op) return;
   const typeVal = document.getElementById('edit-op-type').value;
   const date    = document.getElementById('edit-op-date').value;
@@ -2939,6 +2939,29 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
   const amount  = parseInt(document.getElementById('edit-op-amount').value, 10);
   const account = document.getElementById('edit-op-account').value;
   const category = document.getElementById('edit-op-category').value;
+
+  // Si c'est une opération programmée modifiée "pour toutes les occurrences futures"
+  // et que le mois édité n'est pas le tout premier de la série, on scinde en deux :
+  // l'ancien modèle continue jusqu'au mois précédent, un nouveau modèle démarre à partir du mois édité.
+  if (op.opType === 'Programmee' && _editOpDate) {
+    const baseDate = op.nextPayment || op.date;
+    const baseMonth = baseDate.substring(0, 7);
+    const editMonth = _editOpDate.substring(0, 7);
+    if (editMonth > baseMonth) {
+      const [ey, em] = editMonth.split('-').map(Number);
+      const prevMonthDate = new Date(ey, em - 2, 1);
+      const endYear = prevMonthDate.getFullYear();
+      const endMonthNum = prevMonthDate.getMonth() + 1;
+      const lastDay = new Date(endYear, endMonthNum, 0).getDate();
+      op.endDate = `${endYear}-${String(endMonthNum).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+      const newTemplate = { ...op, id: uid(), date: _editOpDate, nextPayment: _editOpDate };
+      delete newTemplate.endDate;
+      delete newTemplate.exceptions;
+      appData.operations.push(newTemplate);
+      op = newTemplate; // les modifications ci-dessous s'appliquent au nouveau modèle
+    }
+  }
 
   if (typeVal === 'virement') {
     const dest = document.getElementById('edit-op-dest').value;
