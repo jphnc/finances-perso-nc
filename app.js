@@ -1898,7 +1898,9 @@ function getMonthOps(accountFilter, year, month) {
   const now = new Date();
   const currentMonth = now.getFullYear() * 12 + now.getMonth();
   const targetMonth = year * 12 + month;
-  const isFuture = targetMonth > currentMonth;
+  // Inclure les opérations programmées pour le mois courant ET les mois futurs
+  // (une opération programmée reste affichée jusqu'à ce qu'elle soit "passée" via ✅ Passer)
+  const includeScheduled = targetMonth >= currentMonth;
 
   const realOps = appData.operations.filter(op =>
     (!accountFilter || op.account === accountFilter) &&
@@ -1906,7 +1908,7 @@ function getMonthOps(accountFilter, year, month) {
     op.date >= mStart && op.date <= mEnd
   );
 
-  if (isFuture) {
+  if (includeScheduled) {
     const scheduled = scheduledOpsInMonth(year, month, accountFilter);
     return [
       ...realOps,
