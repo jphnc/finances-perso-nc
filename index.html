@@ -64,9 +64,14 @@
     </header>
 
     <div class="balance-card">
-      <p class="label-small">Solde total</p>
+      <p class="label-small">Solde total <span id="balance-date-label"></span></p>
       <p id="display-balance" class="big-amount">0 F</p>
       <p id="sync-status" class="sync-label">Non synchronisé</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:-12px 0 16px;justify-content:center">
+      <label style="font-size:0.78rem;color:var(--muted);white-space:nowrap;margin:0">Solde au :</label>
+      <input type="date" id="balance-date-picker" style="width:auto;padding:6px 10px;font-size:0.82rem"/>
+      <button id="btn-balance-date-today" class="icon-btn" style="font-size:0.9rem;padding:4px 8px" title="Aujourd'hui">📅 Aujourd'hui</button>
     </div>
 
     <div class="section">
@@ -393,7 +398,7 @@
       <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
       <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
       <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center;margin-top:6px"></p>
-      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v77</p>
+      <p style="font-size:0.7rem;color:var(--muted);text-align:center;margin-top:4px">Version v78</p>
     </div>
   </div>
 

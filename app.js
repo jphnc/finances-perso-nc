@@ -132,6 +132,16 @@ document.getElementById('btn-pwd-remove').addEventListener('click', () => {
   if (accessToken) uploadToDrive().catch(() => {});
 });
 
+document.getElementById('balance-date-picker').addEventListener('change', (e) => {
+  dashboardBalanceDate = e.target.value || null;
+  renderDashboard();
+});
+document.getElementById('btn-balance-date-today').addEventListener('click', () => {
+  dashboardBalanceDate = null;
+  document.getElementById('balance-date-picker').value = today();
+  renderDashboard();
+});
+
 function updatePwdStatus() {
   const localPwd = !!localStorage.getItem('finances_pwd');
   const drivePwd = !!(appData && appData.pwdHash);
@@ -494,8 +504,37 @@ function calcTotalBalance() {
   return calcAccountBalance('');
 }
 
+let dashboardBalanceDate = null; // null = aujourd'hui (fin du mois courant)
+
+function calcBalanceAsOf(accountName, dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return calcBalanceAtDate(accountName, y, m - 1, d);
+}
+
+function calcDashboardBalance(name) {
+  if (dashboardBalanceDate) return calcBalanceAsOf(name, dashboardBalanceDate);
+  return calcAccountBalance(name);
+}
+
+function calcDashboardTotalBalance() {
+  const names = getAccountNames();
+  if (names.length > 0) {
+    return names
+      .filter(n => { const a = appData.accounts.find(x => x.name === n); return !a || a.includeInTotal !== false; })
+      .reduce((sum, n) => sum + calcDashboardBalance(n), 0);
+  }
+  return calcDashboardBalance('');
+}
+
 function renderDashboard() {
-  document.getElementById('display-balance').textContent = fmt(calcTotalBalance());
+  document.getElementById('display-balance').textContent = fmt(calcDashboardTotalBalance());
+  const dateLabel = document.getElementById('balance-date-label');
+  if (dashboardBalanceDate) {
+    const d = new Date(dashboardBalanceDate + 'T00:00:00');
+    dateLabel.textContent = `(au ${d.toLocaleDateString('fr-FR')})`;
+  } else {
+    dateLabel.textContent = '';
+  }
 
   const accNames = getAccountNames();
   const listAcc = document.getElementById('list-accounts');
@@ -503,7 +542,7 @@ function renderDashboard() {
     listAcc.innerHTML = '<li class="empty-state">Aucun compte</li>';
   } else {
     listAcc.innerHTML = accNames.map(name => {
-      const bal = calcAccountBalance(name);
+      const bal = calcDashboardBalance(name);
       const cls = bal >= 0 ? 'credit' : 'debit';
       const ops = appData.operations.filter(op => op.account === name).length;
       const acc = appData.accounts.find(a => a.name === name);
@@ -765,6 +804,8 @@ document.getElementById('btn-ops-month-next').addEventListener('click', () => {
 // ── SAISIE DÉPENSE ───────────────────────────────────────────────────────────
 function setDefaultDate() {
   document.getElementById('inp-date').value = today();
+  const picker = document.getElementById('balance-date-picker');
+  if (picker && !picker.value) picker.value = today();
 }
 document.getElementById('form-expense').addEventListener('submit', async (e) => {
   e.preventDefault();
