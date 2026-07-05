@@ -25,6 +25,17 @@ const fmt = (n) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).
 const today = () => localDateStr(new Date());
 const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+// Échappe le texte utilisateur avant insertion dans le HTML (protection XSS)
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function toast(msg, duration = 2500) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -450,7 +461,7 @@ function getBillingInfo(accountName) {
   const period = `${startFmt} → ${endFmt}`;
   const detail = ops.map(op => {
     const sign = op.type === 'credit' ? '+' : '-';
-    return `${op.date.substring(8,10)}/${op.date.substring(5,7)} ${sign}${op.amount} ${op.label}`;
+    return `${op.date.substring(8,10)}/${op.date.substring(5,7)} ${sign}${op.amount} ${esc(op.label)}`;
   }).join(' | ');
   return { period, detail: ops.length + ' ops : ' + detail };
 }
@@ -562,7 +573,7 @@ function renderDashboard() {
       return `<li class="account-item" onclick="filterByAccount('${name.replace(/'/g,"\\'")}')">
         <span class="acc-icon">${isDeferred ? '💳' : '🏦'}</span>
         <div class="op-info" style="flex:1">
-          <div class="op-label">${name}</div>
+          <div class="op-label">${esc(name)}</div>
           <div class="op-meta">${ops} opérations${(appData.alerts && appData.alerts[name] !== undefined && bal < appData.alerts[name]) ? ' · ⚠️ sous le seuil' : ''}</div>
         </div>
         <span class="op-amount ${cls}">${fmt(bal)}</span>
@@ -734,8 +745,8 @@ function renderOperations() {
         <div style="display:flex;align-items:center;gap:12px">
           ${isProgrammee ? '<span class="op-icon">🔁</span>' : `<span class="op-check" onclick="event.stopPropagation();togglePointed('${op.id}')" style="font-size:1.1rem;cursor:pointer;padding:4px">${checkIcon}</span>`}
           <div class="op-info">
-            <div class="op-label">${op.label}</div>
-            <div class="op-meta">${formatDate(op.date)} · ${op.category || ''}${isProgrammee ? ' · programmée' : ''}${op.pointed ? ' · ✓ pointée' : ''}</div>
+            <div class="op-label">${esc(op.label)}</div>
+            <div class="op-meta">${formatDate(op.date)} · ${esc(op.category || '')}${isProgrammee ? ' · programmée' : ''}${op.pointed ? ' · ✓ pointée' : ''}</div>
           </div>
           <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
         </div>
@@ -763,14 +774,14 @@ function renderOperations() {
 function opHtml(op, showAccount = false) {
   const sign = op.type === 'credit' ? '+' : '-';
   const meta = showAccount
-    ? `${formatDate(op.date)} · ${op.account || ''} · ${op.category}`
-    : `${formatDate(op.date)} · ${op.category}`;
+    ? `${formatDate(op.date)} · ${esc(op.account || '')} · ${esc(op.category)}`
+    : `${formatDate(op.date)} · ${esc(op.category)}`;
   const pointed = op.pointed ? 'opacity:0.5;' : '';
   const checkIcon = op.pointed ? '✅' : '⬜';
   return `<li style="cursor:pointer;${pointed}" onclick="editOp('${op.id}','${op.date}')">
     <span class="op-check" onclick="event.stopPropagation();togglePointed('${op.id}')" style="font-size:1.1rem;cursor:pointer;padding:4px">${checkIcon}</span>
     <div class="op-info">
-      <div class="op-label">${op.label}</div>
+      <div class="op-label">${esc(op.label)}</div>
       <div class="op-meta">${meta}</div>
     </div>
     <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
@@ -784,7 +795,7 @@ function formatDate(iso) {
 
 function populateAccountFilters() {
   const names = getAccountNames();
-  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  const opts = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   const allOpt = '<option value="">Tous les comptes</option>';
   document.getElementById('filter-account').innerHTML = allOpt + opts;
   document.getElementById('proj-account').innerHTML = allOpt + opts;
@@ -901,7 +912,7 @@ document.getElementById('btn-mode-transfer').addEventListener('click', () => {
   document.getElementById('btn-mode-expense').style.color = 'var(--text)';
   // Remplir les selects
   const names = getAccountNames();
-  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  const opts = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   document.getElementById('trf-from').innerHTML = opts;
   document.getElementById('trf-to').innerHTML = opts;
   if (names.length > 1) document.getElementById('trf-to').selectedIndex = 1;
@@ -1032,7 +1043,7 @@ function renderAccountsConfig() {
   container.innerHTML = names.map(name => {
     const ops = appData.operations.filter(op => op.account === name).length;
     return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">
-      <span style="flex:1;font-size:0.9rem;font-weight:600">${name}</span>
+      <span style="flex:1;font-size:0.9rem;font-weight:600">${esc(name)}</span>
       <span style="font-size:0.75rem;color:var(--muted)">${ops} ops</span>
       <button onclick="renameAccount('${name.replace(/'/g, "\\'")}')" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer">✏️</button>
       <button onclick="deleteAccount('${name.replace(/'/g, "\\'")}')" style="padding:4px 8px;border:1px solid var(--danger);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer;color:var(--danger)">🗑</button>
@@ -1091,8 +1102,8 @@ function populateTotalAccountsConfig() {
     const acc = appData.accounts.find(a => a.name === name);
     const checked = !acc || acc.includeInTotal !== false ? 'checked' : '';
     return `<label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;font-weight:400;color:var(--text);cursor:pointer">
-      <input type="checkbox" ${checked} data-account="${name}" class="cfg-total-cb" style="width:18px;height:18px;accent-color:var(--primary)"/>
-      ${name}
+      <input type="checkbox" ${checked} data-account="${esc(name)}" class="cfg-total-cb" style="width:18px;height:18px;accent-color:var(--primary)"/>
+      ${esc(name)}
     </label>`;
   }).join('');
 
@@ -1122,7 +1133,7 @@ function getAllCategoryOptions() {
     html += `<option value="${cat}">${CAT_ICONS[cat] || '📦'} ${cat}</option>`;
     if (subs[cat]) {
       for (const sub of subs[cat]) {
-        html += `<option value="${cat}/${sub}">  ↳ ${sub}</option>`;
+        html += `<option value="${esc(cat)}/${esc(sub)}">  ↳ ${esc(sub)}</option>`;
       }
     }
   }
@@ -1139,7 +1150,7 @@ function renderSubcategoriesConfig() {
     html += `<div style="margin-bottom:6px"><span style="font-size:0.85rem;font-weight:600">${CAT_ICONS[cat] || '📦'} ${cat}</span>`;
     html += `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">`;
     for (const sub of subs[cat]) {
-      html += `<span style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:0.78rem;display:flex;align-items:center;gap:4px">${sub}<span onclick="removeSubcat('${cat}','${sub.replace(/'/g,"\\'")}')" style="cursor:pointer;color:var(--danger);font-weight:700">✕</span></span>`;
+      html += `<span style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:0.78rem;display:flex;align-items:center;gap:4px">${esc(sub)}<span onclick="removeSubcat('${cat}','${sub.replace(/'/g,"\\'")}')" style="cursor:pointer;color:var(--danger);font-weight:700">✕</span></span>`;
     }
     html += `</div></div>`;
   }
@@ -1234,7 +1245,7 @@ document.getElementById('btn-save-budgets').addEventListener('click', () => {
 function populateCardConfig() {
   const sel = document.getElementById('cfg-card-account');
   const names = getAccountNames();
-  sel.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   const deferred = appData.accounts.find(a => a.cardType === 'deferred');
   if (deferred) {
     sel.value = deferred.name;
@@ -1306,7 +1317,7 @@ document.getElementById('btn-print-dashboard').addEventListener('click', () => {
     const cls = bal >= 0 ? 'credit' : 'debit';
     const ops = appData.operations.filter(op => op.account === name && op.opType !== 'Programmee').length;
     rows += `<tr>
-      <td>${name}</td>
+      <td>${esc(name)}</td>
       <td class="right">${ops}</td>
       <td class="right ${cls} bold">${fmt(bal)}</td>
     </tr>`;
@@ -1354,8 +1365,8 @@ document.getElementById('btn-print-ops').addEventListener('click', () => {
       const cls = op.type === 'credit' ? 'credit' : 'debit';
       rows += `<tr>
         <td>${formatDate(op.date)}</td>
-        <td>${op.label}</td>
-        <td>${op.category || ''}</td>
+        <td>${esc(op.label)}</td>
+        <td>${esc(op.category || '')}</td>
         <td class="right ${cls}">${sign}${fmt(op.amount)}</td>
         <td class="right bold">${fmt(running)}</td>
       </tr>`;
@@ -1382,9 +1393,9 @@ document.getElementById('btn-print-ops').addEventListener('click', () => {
       const cls = op.type === 'credit' ? 'credit' : 'debit';
       rows += `<tr>
         <td>${formatDate(op.date)}</td>
-        <td>${op.label}</td>
-        <td>${op.account}</td>
-        <td>${op.category || ''}</td>
+        <td>${esc(op.label)}</td>
+        <td>${esc(op.account)}</td>
+        <td>${esc(op.category || '')}</td>
         <td class="right ${cls}">${sign}${fmt(op.amount)}</td>
       </tr>`;
     }
@@ -1554,7 +1565,7 @@ function populateExportAccount() {
   const names = getAccountNames();
   const sel = document.getElementById('cfg-export-account');
   sel.innerHTML = '<option value="">Tous les comptes</option>' +
-    names.map(n => `<option value="${n}">${n}</option>`).join('');
+    names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
 }
 
 document.getElementById('btn-export-csv').addEventListener('click', () => {
@@ -1596,8 +1607,8 @@ function renderAlertsConfig() {
   container.innerHTML = names.map(name => {
     const val = alerts[name] !== undefined ? alerts[name] : '';
     return `<div style="display:flex;align-items:center;gap:8px">
-      <span style="flex:1;font-size:0.85rem">${name}</span>
-      <input type="number" data-alert-acc="${name}" value="${val}" placeholder="—" inputmode="numeric" style="width:100px;padding:6px;text-align:right;font-size:0.85rem"/>
+      <span style="flex:1;font-size:0.85rem">${esc(name)}</span>
+      <input type="number" data-alert-acc="${esc(name)}" value="${val}" placeholder="—" inputmode="numeric" style="width:100px;padding:6px;text-align:right;font-size:0.85rem"/>
       <span style="font-size:0.78rem;color:var(--muted)">F</span>
     </div>`;
   }).join('');
@@ -2169,7 +2180,7 @@ function renderProjection() {
         return `<td style="padding:4px 6px;text-align:right;font-size:0.78rem;font-weight:600;color:${col};white-space:nowrap">${fmtS(bal)}</td>`;
       }).join('');
       return `<tr style="border-top:1px solid var(--border)">
-        <td style="padding:4px 6px;font-size:0.8rem;font-weight:600;white-space:nowrap">${name}</td>
+        <td style="padding:4px 6px;font-size:0.8rem;font-weight:600;white-space:nowrap">${esc(name)}</td>
         ${cells}
       </tr>`;
     }).join('');
@@ -2210,7 +2221,7 @@ function renderProjection() {
       : '';
     prevMonth = monthLabel;
     return `${monthSep}<tr style="border-top:1px solid var(--border)">
-      <td style="padding:5px 8px;font-size:0.83rem">${op.label}<br><span style="font-size:0.72rem;color:var(--muted)">${op.account}</span></td>
+      <td style="padding:5px 8px;font-size:0.83rem">${esc(op.label)}<br><span style="font-size:0.72rem;color:var(--muted)">${esc(op.account)}</span></td>
       <td style="padding:5px 8px;text-align:right;font-size:0.85rem;color:${amtCol};white-space:nowrap">${sign}${fmtN(op.amount)} F</td>
       <td style="padding:5px 8px;text-align:right;font-size:0.85rem;font-weight:700;color:${balCol};white-space:nowrap">${fmtN(bal)} F</td>
     </tr>`;
@@ -2282,8 +2293,8 @@ function renderScheduled() {
     return `<li>
       <span class="op-icon">🔁</span>
       <div class="op-info">
-        <div class="op-label">${op.label}</div>
-        <div class="op-meta">${op.account} · ${freq} · prochain : ${next}${endInfo}</div>
+        <div class="op-label">${esc(op.label)}</div>
+        <div class="op-meta">${esc(op.account)} · ${esc(freq)} · prochain : ${next}${endInfo}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
@@ -2374,7 +2385,7 @@ window.editScheduled = function(id) {
   wrap.dataset.editId = id;
   wrap.querySelector('h3').textContent = 'Modifier l\'opération programmée';
   const names = getAccountNames();
-  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  const opts = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   document.getElementById('sch-account').innerHTML = opts;
   document.getElementById('sch-dest').innerHTML = opts;
   document.getElementById('sch-label').value = op.label;
@@ -2408,7 +2419,7 @@ document.getElementById('btn-add-scheduled').addEventListener('click', () => {
   document.getElementById('form-scheduled-wrap').classList.remove('hidden');
   document.getElementById('sch-next').value = today();
   const names = getAccountNames();
-  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  const opts = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   document.getElementById('sch-account').innerHTML = opts;
   document.getElementById('sch-dest').innerHTML = opts;
   if (names.length > 1) document.getElementById('sch-dest').selectedIndex = 1;
@@ -2506,7 +2517,7 @@ document.getElementById('btn-open-paste-import').addEventListener('click', () =>
   pasteBatches = [];
   updateBatchesDisplay();
   const names = getAccountNames();
-  document.getElementById('paste-account').innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  document.getElementById('paste-account').innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
 });
 
 // Ajouter un collage à la pile
@@ -2803,7 +2814,7 @@ function renderPasteStep3() {
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--border);flex-wrap:wrap;${dupeStyle}">
       <input type="checkbox" ${checked} onchange="parsedOps[${i}].skip=!this.checked" style="width:18px;height:18px;accent-color:var(--primary)"/>
       <span style="font-size:0.78rem;color:var(--muted);min-width:65px">${formatDate(op.date)}</span>
-      <span style="flex:1;font-size:0.82rem;font-weight:600;min-width:80px">${op.label}${op.duplicate ? ' <span style="color:var(--warning);font-size:0.72rem">⚠️ doublon</span>' : ''}</span>
+      <span style="flex:1;font-size:0.82rem;font-weight:600;min-width:80px">${esc(op.label)}${op.duplicate ? ' <span style="color:var(--warning);font-size:0.72rem">⚠️ doublon</span>' : ''}</span>
       <span style="font-weight:700;color:${col};font-size:0.85rem;min-width:70px;text-align:right">${sign}${fmt(op.amount)}</span>
       <select onchange="parsedOps[${i}].category=this.value" style="padding:4px 6px;font-size:0.75rem;min-width:90px">${catOptions.replace(`value="${op.category}"`, `value="${op.category}" selected`)}</select>
     </div>`;
@@ -2926,7 +2937,7 @@ window.editOp = function(id, occurrenceDate) {
 
 function openEditModal(op) {
   const names = getAccountNames();
-  const opts = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  const opts = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   document.getElementById('edit-op-account').innerHTML = opts;
   document.getElementById('edit-op-dest').innerHTML = opts;
   document.getElementById('edit-op-date').value     = op.date;
