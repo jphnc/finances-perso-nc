@@ -22,7 +22,7 @@ let appData = structuredClone(defaultData);
 
 // ── UTILITAIRES ─────────────────────────────────────────────────────────────
 const fmt = (n) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' F';
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => localDateStr(new Date());
 const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 function toast(msg, duration = 2500) {
@@ -388,22 +388,11 @@ const CAT_ICONS = {
   Logement:'🏠', Telecom:'📱', Revenus:'💰', Autre:'📦',
 };
 
-function calcAccountBalance(accountName, maxDate) {
-  if (maxDate) {
-    // Cas avec date précise (ex: impression, historique) : calcul direct sans ops programmées
-    const acc = appData.accounts.find(a => a.name === accountName);
-    const initial = acc ? (acc.initialBalance || 0) : 0;
-    const ops = appData.operations.filter(op =>
-      (!accountName || op.account === accountName) &&
-      op.opType !== 'Programmee' &&
-      op.date <= maxDate
-    );
-    return initial + ops.reduce((sum, op) =>
-      op.type === 'credit' ? sum + op.amount : sum - op.amount, 0);
-  }
-  // Cas par défaut : solde de fin de mois courant, cohérent avec la vue Opérations
-  const now = new Date();
-  return calcBalanceEndOfMonth(accountName, now.getFullYear(), now.getMonth());
+// Solde "actuel" d'un compte = solde à la date du jour, ops programmées du mois courant incluses.
+// Seul point d'entrée pour le solde courant — cohérent avec la vue Opérations et la Projection,
+// qui reposent toutes sur calcBalanceAtDate (voir plus bas dans le fichier).
+function calcAccountBalance(accountName) {
+  return calcBalanceAsOf(accountName, today());
 }
 
 // ── DÉBIT DIFFÉRÉ ───────────────────────────────────────────────────────────
@@ -494,26 +483,16 @@ function getAccountNames() {
 }
 
 // ── RENDU ────────────────────────────────────────────────────────────────────
-function calcTotalBalance() {
-  const names = getAccountNames();
-  if (names.length > 0) {
-    return names
-      .filter(n => { const a = appData.accounts.find(x => x.name === n); return !a || a.includeInTotal !== false; })
-      .reduce((sum, n) => sum + calcAccountBalance(n), 0);
-  }
-  return calcAccountBalance('');
-}
-
-let dashboardBalanceDate = null; // null = aujourd'hui (fin du mois courant)
+let dashboardBalanceDate = null; // null = aujourd'hui, sinon date choisie via le sélecteur
 
 function calcBalanceAsOf(accountName, dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return calcBalanceAtDate(accountName, y, m - 1, d);
 }
 
+// Solde utilisé par le dashboard : à la date choisie, ou aujourd'hui par défaut
 function calcDashboardBalance(name) {
-  if (dashboardBalanceDate) return calcBalanceAsOf(name, dashboardBalanceDate);
-  return calcAccountBalance(name);
+  return calcBalanceAsOf(name, dashboardBalanceDate || today());
 }
 
 function calcDashboardTotalBalance() {
@@ -599,6 +578,78 @@ function renderDashboard() {
   } else {
     listRec.innerHTML = sorted.map(op => opHtml(op)).join('');
   }
+
+  renderWealthChart();
+}
+
+// Évolution du patrimoine total sur les 12 derniers mois (comptes inclus dans le solde total)
+function renderWealthChart() {
+  const container = document.getElementById('wealth-chart');
+  if (!container) return;
+
+  const now = new Date();
+  const points = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const bal = calcBalanceEndOfMonth('', d.getFullYear(), d.getMonth());
+    const label = d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+    points.push({ label, balance: bal });
+  }
+
+  const fmtK = v => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(v);
+  const n = points.length;
+  const W = Math.max(400, n * 50);
+  const H = 200;
+  const pad = { top: 24, right: 12, bottom: 50, left: 65 };
+  const cw = W - pad.left - pad.right;
+  const ch = H - pad.top - pad.bottom;
+
+  const balances = points.map(p => p.balance);
+  const minB = Math.min(0, ...balances);
+  const maxB = Math.max(0, ...balances);
+  const range = maxB - minB || 1;
+
+  const yScale = v => pad.top + ch - ((v - minB) / range) * ch;
+  const gap = cw / n;
+  const barW = Math.max(10, Math.min(32, gap * 0.6));
+  const zeroY = yScale(0);
+
+  const gridLines = [0, 0.5, 1].map(r => {
+    const v = minB + r * range;
+    const y = yScale(v);
+    return `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="var(--border)" stroke-dasharray="3,3"/>
+            <text x="${pad.left - 4}" y="${y + 4}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtK(v)}</text>`;
+  }).join('');
+
+  const bars = points.map((p, i) => {
+    const x = pad.left + i * gap + (gap - barW) / 2;
+    const y = yScale(p.balance);
+    const h = Math.abs(y - zeroY);
+    const top = p.balance >= 0 ? y : zeroY;
+    const col = p.balance >= 0 ? '#43a047' : '#e53935';
+    return `<rect x="${x}" y="${top}" width="${barW}" height="${h}" fill="${col}" rx="3" opacity="0.85"/>`;
+  }).join('');
+
+  const polyPts = points.map((p, i) => `${pad.left + i * gap + gap / 2},${yScale(p.balance)}`).join(' ');
+  const dots = points.map((p, i) => {
+    const x = pad.left + i * gap + gap / 2;
+    return `<circle cx="${x}" cy="${yScale(p.balance)}" r="3" fill="var(--primary)" stroke="white" stroke-width="1.5"/>`;
+  }).join('');
+
+  const xLabels = points.map((p, i) => {
+    const x = pad.left + i * gap + gap / 2;
+    return `<text x="${x}" y="${H - pad.bottom + 14}" text-anchor="end" font-size="8" fill="var(--muted)" transform="rotate(-45 ${x} ${H - pad.bottom + 14})">${p.label}</text>`;
+  }).join('');
+
+  const svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;min-width:300px">
+    ${gridLines}
+    <line x1="${pad.left}" y1="${zeroY}" x2="${W - pad.right}" y2="${zeroY}" stroke="var(--text)" stroke-width="0.5" opacity="0.3"/>
+    ${bars}
+    <polyline points="${polyPts}" fill="none" stroke="var(--primary)" stroke-width="2" opacity="0.6"/>
+    ${dots}
+    ${xLabels}
+  </svg>`;
+  container.innerHTML = svg;
 }
 
 let opsMonth = new Date().getMonth();
