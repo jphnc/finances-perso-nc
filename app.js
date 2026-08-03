@@ -706,8 +706,10 @@ function renderOperations() {
     // Opérations du mois
     const monthOps = getMonthOps(accFilter, opsYear, opsMonth);
     // Solde de début = solde fin - delta des ops du mois
-    const monthDelta = monthOps.reduce((s, op) =>
-      op.type === 'credit' ? s + op.amount : s - op.amount, 0);
+    const monthDelta = monthOps.reduce((s, op) => {
+      if (op.unconfirmed) return s; // non comptée dans le solde
+      return op.type === 'credit' ? s + op.amount : s - op.amount;
+    }, 0);
     const balanceStart = endOfMonthBal - monthDelta;
 
     // Afficher solde début de mois
@@ -727,6 +729,7 @@ function renderOperations() {
     // Calculer le solde cumulé dans l'ordre croissant (toujours)
     let running = balanceStart;
     const opsWithBalance = monthOps.map(op => {
+      if (op.unconfirmed) return { op, balance: running }; // affichée mais pas comptée
       const delta = op.type === 'credit' ? op.amount : -op.amount;
       running += delta;
       return { op, balance: running };
@@ -741,17 +744,21 @@ function renderOperations() {
       const pointed = op.pointed ? 'opacity:0.5;' : '';
       const checkIcon = op.pointed ? '✅' : '⬜';
       const isProgrammee = op.opType === 'Programmee';
-      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer;${pointed}" onclick="editOp('${op.id}','${op.date}')">
+      const unconfirmedStyle = op.unconfirmed ? 'border-left:3px solid var(--warning);' : '';
+      const metaSuffix = op.unconfirmed
+        ? ' · ⚠️ non confirmée — cliquez pour valider'
+        : (isProgrammee ? ' · programmée' : '');
+      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer;${pointed}${unconfirmedStyle}" onclick="editOp('${op.id}','${op.date}')">
         <div style="display:flex;align-items:center;gap:12px">
           ${isProgrammee ? '<span class="op-icon">🔁</span>' : `<span class="op-check" onclick="event.stopPropagation();togglePointed('${op.id}')" style="font-size:1.1rem;cursor:pointer;padding:4px">${checkIcon}</span>`}
           <div class="op-info">
             <div class="op-label">${esc(op.label)}</div>
-            <div class="op-meta">${formatDate(op.date)} · ${esc(op.category || '')}${isProgrammee ? ' · programmée' : ''}${op.pointed ? ' · ✓ pointée' : ''}</div>
+            <div class="op-meta">${formatDate(op.date)} · ${esc(op.category || '')}${metaSuffix}${op.pointed ? ' · ✓ pointée' : ''}</div>
           </div>
           <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
         </div>
-        <div style="text-align:right;font-size:0.78rem;color:${balCol};font-weight:600;border-top:1px solid var(--border);padding-top:5px">
-          Solde : ${fmtN(balance)} F
+        <div style="text-align:right;font-size:0.78rem;color:${op.unconfirmed ? 'var(--warning)' : balCol};font-weight:600;border-top:1px solid var(--border);padding-top:5px">
+          ${op.unconfirmed ? 'Non comptée — solde à cette étape : ' : 'Solde : '}${fmtN(balance)} F
         </div>
       </li>`;
     }).join('');
@@ -1997,9 +2004,7 @@ function getMonthOps(accountFilter, year, month) {
   const now = new Date();
   const currentMonth = now.getFullYear() * 12 + now.getMonth();
   const targetMonth = year * 12 + month;
-  // Inclure les opérations programmées pour le mois courant ET les mois futurs
-  // (une opération programmée reste affichée jusqu'à ce qu'elle soit "passée" via ✅ Passer)
-  const includeScheduled = targetMonth >= currentMonth;
+  const isPast = targetMonth < currentMonth;
 
   const realOps = appData.operations.filter(op =>
     (!accountFilter || op.account === accountFilter) &&
@@ -2007,14 +2012,24 @@ function getMonthOps(accountFilter, year, month) {
     op.date >= mStart && op.date <= mEnd
   );
 
-  if (includeScheduled) {
-    const scheduled = scheduledOpsInMonth(year, month, accountFilter);
+  const scheduled = scheduledOpsInMonth(year, month, accountFilter);
+  if (!scheduled.length) return realOps.sort((a, b) => a.date.localeCompare(b.date));
+
+  if (isPast) {
+    // Mois déjà passé : montrer les échéances jamais confirmées pour qu'elles ne
+    // disparaissent pas silencieusement, mais sans les compter dans le solde
+    // (évite un double-comptage si l'opération réelle a été saisie manuellement).
     return [
       ...realOps,
-      ...scheduled.map(op => ({ ...op, opType: 'Programmee' })),
+      ...scheduled.map(op => ({ ...op, opType: 'Programmee', unconfirmed: true })),
     ].sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
   }
-  return realOps.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Mois courant ou futur : comportement existant, comptabilisé dans le solde
+  return [
+    ...realOps,
+    ...scheduled.map(op => ({ ...op, opType: 'Programmee' })),
+  ].sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
 }
 
 function calcProjection(accountFilter, horizonMonths) {
