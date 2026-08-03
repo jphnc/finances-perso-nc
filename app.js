@@ -706,10 +706,8 @@ function renderOperations() {
     // Opérations du mois
     const monthOps = getMonthOps(accFilter, opsYear, opsMonth);
     // Solde de début = solde fin - delta des ops du mois
-    const monthDelta = monthOps.reduce((s, op) => {
-      if (op.unconfirmed) return s; // non comptée dans le solde
-      return op.type === 'credit' ? s + op.amount : s - op.amount;
-    }, 0);
+    const monthDelta = monthOps.reduce((s, op) =>
+      op.type === 'credit' ? s + op.amount : s - op.amount, 0);
     const balanceStart = endOfMonthBal - monthDelta;
 
     // Afficher solde début de mois
@@ -729,7 +727,6 @@ function renderOperations() {
     // Calculer le solde cumulé dans l'ordre croissant (toujours)
     let running = balanceStart;
     const opsWithBalance = monthOps.map(op => {
-      if (op.unconfirmed) return { op, balance: running }; // affichée mais pas comptée
       const delta = op.type === 'credit' ? op.amount : -op.amount;
       running += delta;
       return { op, balance: running };
@@ -744,11 +741,8 @@ function renderOperations() {
       const pointed = op.pointed ? 'opacity:0.5;' : '';
       const checkIcon = op.pointed ? '✅' : '⬜';
       const isProgrammee = op.opType === 'Programmee';
-      const unconfirmedStyle = op.unconfirmed ? 'border-left:3px solid var(--warning);' : '';
-      const metaSuffix = op.unconfirmed
-        ? ' · ⚠️ non confirmée — cliquez pour valider'
-        : (isProgrammee ? ' · programmée' : '');
-      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer;${pointed}${unconfirmedStyle}" onclick="editOp('${op.id}','${op.date}')">
+      const metaSuffix = isProgrammee ? ' · programmée' : '';
+      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer;${pointed}" onclick="editOp('${op.id}','${op.date}')">
         <div style="display:flex;align-items:center;gap:12px">
           ${isProgrammee ? '<span class="op-icon">🔁</span>' : `<span class="op-check" onclick="event.stopPropagation();togglePointed('${op.id}')" style="font-size:1.1rem;cursor:pointer;padding:4px">${checkIcon}</span>`}
           <div class="op-info">
@@ -757,8 +751,8 @@ function renderOperations() {
           </div>
           <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
         </div>
-        <div style="text-align:right;font-size:0.78rem;color:${op.unconfirmed ? 'var(--warning)' : balCol};font-weight:600;border-top:1px solid var(--border);padding-top:5px">
-          ${op.unconfirmed ? 'Non comptée — solde à cette étape : ' : 'Solde : '}${fmtN(balance)} F
+        <div style="text-align:right;font-size:0.78rem;color:${balCol};font-weight:600;border-top:1px solid var(--border);padding-top:5px">
+          Solde : ${fmtN(balance)} F
         </div>
       </li>`;
     }).join('');
@@ -1945,6 +1939,22 @@ function scheduledOpsInMonth(year, month, accountFilter) {
 // Calcul du solde entre deux dates de cycle
 // cutDay = 0 ou vide → fin de mois classique
 // cutDay = 25 → le solde au 25 du mois = toutes ops du 25 du mois précédent+1 au 25 de ce mois
+// Premier mois (année*12+mois) où une opération programmée du compte peut s'appliquer.
+// Sert de borne basse pour compter les échéances programmées, même sur des mois déjà passés.
+function getEarliestScheduledMonth(accountFilter) {
+  let min = null;
+  for (const op of appData.operations) {
+    if (op.opType !== 'Programmee') continue;
+    if (accountFilter && op.account !== accountFilter) continue;
+    const base = op.nextPayment || op.date;
+    if (!base) continue;
+    const d = new Date(base + 'T00:00:00');
+    const m = d.getFullYear() * 12 + d.getMonth();
+    if (min === null || m < min) min = m;
+  }
+  return min;
+}
+
 function calcBalanceAtDate(accountFilter, year, month, cutDay) {
   // Date de fin du cycle pour ce mois
   let cutDate;
@@ -1966,7 +1976,9 @@ function calcBalanceAtDate(accountFilter, year, month, cutDay) {
       op.account === accountFilter && op.opType !== 'Programmee' && op.date <= cutDate);
     let bal = initial + realOps.reduce((s, op) =>
       op.type === 'credit' ? s + op.amount : s - op.amount, 0);
-    for (let m = currentMonth; m <= targetMonth; m++) {
+    const earliestSched = getEarliestScheduledMonth(accountFilter);
+    const loopStart = earliestSched !== null ? Math.min(earliestSched, currentMonth) : currentMonth;
+    for (let m = loopStart; m <= targetMonth; m++) {
       const y2 = Math.floor(m/12), m2 = m%12;
       const schOps = scheduledOpsInMonth(y2, m2, accountFilter);
       let mCut;
@@ -2001,10 +2013,6 @@ function calcBalanceEndOfMonth(accountFilter, year, month) {
 function getMonthOps(accountFilter, year, month) {
   const mStart = `${year}-${String(month+1).padStart(2,'0')}-01`;
   const mEnd = `${year}-${String(month+1).padStart(2,'0')}-31`;
-  const now = new Date();
-  const currentMonth = now.getFullYear() * 12 + now.getMonth();
-  const targetMonth = year * 12 + month;
-  const isPast = targetMonth < currentMonth;
 
   const realOps = appData.operations.filter(op =>
     (!accountFilter || op.account === accountFilter) &&
@@ -2015,17 +2023,9 @@ function getMonthOps(accountFilter, year, month) {
   const scheduled = scheduledOpsInMonth(year, month, accountFilter);
   if (!scheduled.length) return realOps.sort((a, b) => a.date.localeCompare(b.date));
 
-  if (isPast) {
-    // Mois déjà passé : montrer les échéances jamais confirmées pour qu'elles ne
-    // disparaissent pas silencieusement, mais sans les compter dans le solde
-    // (évite un double-comptage si l'opération réelle a été saisie manuellement).
-    return [
-      ...realOps,
-      ...scheduled.map(op => ({ ...op, opType: 'Programmee', unconfirmed: true })),
-    ].sort((a, b) => (a.nextPayment || a.date).localeCompare(b.nextPayment || b.date));
-  }
-
-  // Mois courant ou futur : comportement existant, comptabilisé dans le solde
+  // Les échéances programmées comptent dans le solde quel que soit le mois
+  // (passé, courant ou futur), tant qu'elles n'ont pas été explicitement
+  // exclues (voir "exceptions" dans scheduledOpsInMonth).
   return [
     ...realOps,
     ...scheduled.map(op => ({ ...op, opType: 'Programmee' })),
