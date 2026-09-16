@@ -3058,28 +3058,10 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
   const account = document.getElementById('edit-op-account').value;
   const category = document.getElementById('edit-op-category').value;
 
-  // Si c'est une opération programmée modifiée "pour toutes les occurrences futures"
-  // et que le mois édité n'est pas le tout premier de la série, on scinde en deux :
-  // l'ancien modèle continue jusqu'au mois précédent, un nouveau modèle démarre à partir du mois édité.
-  if (op.opType === 'Programmee' && _editOpDate) {
-    const baseDate = op.nextPayment || op.date;
-    const baseMonth = baseDate.substring(0, 7);
-    const editMonth = _editOpDate.substring(0, 7);
-    if (editMonth > baseMonth) {
-      const [ey, em] = editMonth.split('-').map(Number);
-      const prevMonthDate = new Date(ey, em - 2, 1);
-      const endYear = prevMonthDate.getFullYear();
-      const endMonthNum = prevMonthDate.getMonth() + 1;
-      const lastDay = new Date(endYear, endMonthNum, 0).getDate();
-      op.endDate = `${endYear}-${String(endMonthNum).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
-
-      const newTemplate = { ...op, id: uid(), date: _editOpDate, nextPayment: _editOpDate };
-      delete newTemplate.endDate;
-      delete newTemplate.exceptions;
-      appData.operations.push(newTemplate);
-      op = newTemplate; // les modifications ci-dessous s'appliquent au nouveau modèle
-    }
-  }
+  // "Toutes les occurrences" édite toujours le modèle existant en place —
+  // jamais de scission ni de nouvelle opération créée ici (voir feedback utilisateur :
+  // la scission automatique créait une "nouvelle opération" à chaque modification).
+  const isScheduled = op.opType === 'Programmee';
 
   if (typeVal === 'virement') {
     const dest = document.getElementById('edit-op-dest').value;
@@ -3133,6 +3115,8 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
     op.category = category;
     toast('✅ Opération modifiée');
   }
+
+  if (isScheduled) op.nextPayment = date;
 
   saveLocal();
   // Conserver le compte et le mois actif
