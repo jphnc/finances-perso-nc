@@ -1697,7 +1697,7 @@ function updateBackupDirStatus() {
   } else {
     loadHandle().then(h => {
       if (h) {
-        el.textContent = '⚠️ Dossier configuré mais permission expirée — recliquez "📁 Choisir"';
+        el.textContent = `⚠️ Dossier "${h.name}" configuré mais permission expirée (normal après un redémarrage du navigateur) — cliquez "📁 Choisir" pour la redonner en un clic`;
         el.style.color = '#ef9f27';
       } else {
         el.textContent = 'Aucun dossier configuré';
@@ -1712,6 +1712,25 @@ document.getElementById('btn-backup-dir').addEventListener('click', async () => 
   if (!window.showDirectoryPicker) {
     toast('⚠️ Non disponible sur ce navigateur (uniquement Chrome PC)');
     return;
+  }
+  // Chrome révoque la permission d'accès au dossier à chaque redémarrage complet
+  // du navigateur (comportement normal, pas un bug). Si un dossier est déjà
+  // connu, on redemande juste la permission dessus (petite popup) au lieu de
+  // forcer à re-choisir le dossier depuis l'explorateur de fichiers.
+  const existing = await loadHandle();
+  if (existing) {
+    try {
+      const perm = await existing.requestPermission({ mode: 'readwrite' });
+      if (perm === 'granted') {
+        backupDirHandle = existing;
+        updateBackupDirStatus();
+        toast('✅ Accès au dossier réautorisé');
+        await writeBackupToDir();
+        return;
+      }
+    } catch (e) {
+      // handle invalide/orphelin (ex. dossier supprimé) → on retombe sur le choix d'un nouveau dossier
+    }
   }
   try {
     const handle = await window.showDirectoryPicker({ mode: 'readwrite' });

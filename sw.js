@@ -1,5 +1,5 @@
 // Service Worker — network-first avec cache fallback
-const CACHE = 'finances-nc-v85';
+const CACHE = 'finances-nc-v86';
 const ASSETS = ['./', './index.html', './style.css', './app.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
