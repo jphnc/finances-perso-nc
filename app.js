@@ -3058,10 +3058,31 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
   const account = document.getElementById('edit-op-account').value;
   const category = document.getElementById('edit-op-category').value;
 
-  // "Toutes les occurrences" édite toujours le modèle existant en place —
-  // jamais de scission ni de nouvelle opération créée ici (voir feedback utilisateur :
-  // la scission automatique créait une "nouvelle opération" à chaque modification).
   const isScheduled = op.opType === 'Programmee';
+
+  // "Toutes les occurrences futures" : les échéances déjà passées (mois antérieur
+  // à celui édité) gardent leurs anciennes valeurs — on scinde le modèle en deux :
+  // l'ancien s'arrête à la fin du mois précédent (valeurs inchangées), un nouveau
+  // modèle reprend à partir du mois édité avec les nouvelles valeurs.
+  if (isScheduled && _editOpDate) {
+    const baseDate = op.nextPayment || op.date;
+    const baseMonth = baseDate.substring(0, 7);
+    const editMonth = _editOpDate.substring(0, 7);
+    if (editMonth > baseMonth) {
+      const [ey, em] = editMonth.split('-').map(Number);
+      const prevMonthDate = new Date(ey, em - 2, 1);
+      const endYear = prevMonthDate.getFullYear();
+      const endMonthNum = prevMonthDate.getMonth() + 1;
+      const lastDay = new Date(endYear, endMonthNum, 0).getDate();
+      op.endDate = `${endYear}-${String(endMonthNum).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+      const newTemplate = { ...op, id: uid(), date: _editOpDate, nextPayment: _editOpDate };
+      delete newTemplate.endDate;
+      delete newTemplate.exceptions;
+      appData.operations.push(newTemplate);
+      op = newTemplate; // les modifications ci-dessous s'appliquent au nouveau modèle, pas à l'ancien
+    }
+  }
 
   if (typeVal === 'virement' && isScheduled) {
     // Modèle programmé : les deux jambes (débit/crédit) sont générées à la volée
