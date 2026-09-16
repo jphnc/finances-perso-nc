@@ -3063,7 +3063,22 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
   // la scission automatique créait une "nouvelle opération" à chaque modification).
   const isScheduled = op.opType === 'Programmee';
 
-  if (typeVal === 'virement') {
+  if (typeVal === 'virement' && isScheduled) {
+    // Modèle programmé : les deux jambes (débit/crédit) sont générées à la volée
+    // par scheduledOpsInMonth à partir de ce seul modèle — on ne touche PAS à
+    // opType (doit rester 'Programmee') et on ne crée/cherche aucune opération
+    // stockée pour le crédit, sinon le modèle sort du calendrier récurrent.
+    const dest = document.getElementById('edit-op-dest').value;
+    if (account === dest) { toast('⚠️ Source et destination identiques'); return; }
+    op.date = date;
+    op.label = `[${dest}]`;
+    op.virementDest = dest;
+    op.amount = amount;
+    op.type = 'debit';
+    op.account = account;
+    op.category = 'Virement';
+    toast(`✅ Virement programmé modifié : ${account} → ${dest}`);
+  } else if (typeVal === 'virement') {
     const dest = document.getElementById('edit-op-dest').value;
     if (account === dest) { toast('⚠️ Source et destination identiques'); return; }
 
@@ -3113,6 +3128,7 @@ document.getElementById('edit-op-confirm').addEventListener('click', () => {
     op.type     = typeVal;
     op.account  = account;
     op.category = category;
+    if (isScheduled) delete op.virementDest; // au cas où le modèle était un virement avant
     toast('✅ Opération modifiée');
   }
 
