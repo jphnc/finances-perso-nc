@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a237e" />
+  <title>Finances Perso NC</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ===== ÉCRAN DE VERROUILLAGE ===== -->
+<div id="screen-lock" class="screen">
+  <div class="login-card">
+    <div class="app-icon">🔒</div>
+    <h1>Finances Perso NC</h1>
+    <p class="subtitle">Entrez votre mot de passe</p>
+    <input type="password" id="lock-password" placeholder="Mot de passe" style="text-align:center;font-size:1.1rem;padding:14px;margin-bottom:12px" autocomplete="current-password"/>
+    <button id="btn-unlock" class="btn-primary" style="width:100%">🔓 Déverrouiller</button>
+    <p id="lock-error" class="hidden" style="color:#e53935;font-size:0.85rem;margin-top:8px"></p>
+  </div>
+</div>
+
+<!-- ===== ÉCRAN DE CONNEXION ===== -->
+<div id="screen-login" class="screen active">
+  <div class="login-card">
+    <div class="app-icon">💰</div>
+    <h1>Finances Perso NC</h1>
+    <p class="subtitle">Gestion en Franc CFP</p>
+    <button id="btn-login" class="btn-google">
+      <svg width="20" height="20" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.1 0 5.8 1.1 8 2.9l6-6C34.5 3.1 29.6 1 24 1 14.8 1 7 6.7 3.7 14.6l7 5.4C12.5 13.6 17.8 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.4 5.7c4.3-4 6.8-9.9 6.8-16.9z"/>
+        <path fill="#FBBC05" d="M10.7 28.5A14.6 14.6 0 0 1 9.5 24c0-1.6.3-3.1.7-4.5l-7-5.4A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l8.1-6.2z"/>
+        <path fill="#34A853" d="M24 47c6 0 11-2 14.6-5.4l-7.4-5.7c-2 1.4-4.6 2.1-7.2 2.1-6.2 0-11.5-4.1-13.3-9.8l-8 6.2C6.9 41.4 14.8 47 24 47z"/>
+      </svg>
+      Connexion avec Google
+    </button>
+    <p class="hint">Accès limité à votre fichier Drive uniquement</p>
+    <button id="btn-skip-login" style="margin-top:12px;background:none;border:none;color:rgba(255,255,255,0.7);font-size:0.85rem;cursor:pointer;text-decoration:underline">Continuer sans connexion</button>
+  </div>
+</div>
+
+<!-- ===== ÉCRAN PRINCIPAL ===== -->
+<div id="screen-main" class="screen">
+  <button type="button" id="btn-search" class="search-fab" aria-haspopup="dialog">🔍 <span>Rechercher</span></button>
+
+  <!-- Pastille de connexion : l'état de la connexion à Google Drive reste visible dans le coin de l'écran -->
+  <button type="button" id="conn-badge" class="conn-badge off" title="Non connecté">
+    <span class="dot" aria-hidden="true"></span><span class="txt">Non connecté</span>
+  </button>
+
+  <!-- Navigation -->
+  <nav class="bottom-nav" aria-label="Navigation principale">
+    <button class="nav-btn active" data-tab="dashboard" aria-label="Comptes">📊<span>Comptes</span></button>
+    <button class="nav-btn" data-tab="operations" aria-label="Opérations">📋<span>Opérations</span></button>
+    <button class="nav-btn" data-tab="add-expense" aria-label="Saisie opération">➕<span>Saisie opération</span></button>
+    <button class="nav-btn" data-tab="scheduled" aria-label="Opérations programmées">🔁<span>Programmées</span></button>
+    <button class="nav-btn" data-tab="settings" aria-label="Paramètres">⚙️<span>Paramètres</span></button>
+    <button id="btn-help" class="nav-btn nav-help" aria-label="Aide">❓</button>
+  </nav>
+
+  <!-- ---- TAB : Tableau de bord (Comptes) ---- -->
+  <div id="tab-dashboard" class="tab-content active">
+    <header class="top-header">
+      <h2>Mes comptes</h2>
+      <div class="header-actions">
+        <button id="btn-print-dashboard" class="icon-btn" title="Imprimer" aria-label="Imprimer">🖨️</button>
+        <button id="btn-sync" class="icon-btn" title="Synchroniser avec Drive" aria-label="Synchroniser avec Drive">🔄</button>
+      </div>
+    </header>
+    <p id="dash-date" class="dash-sub"></p>
+    <div id="backup-alert" class="backup-alert hidden" role="status">
+      <span id="backup-alert-text"></span>
+      <button type="button" id="backup-alert-fix" class="btn-primary"></button>
+      <button type="button" id="backup-alert-close" class="info-x" aria-label="Masquer ce message">✕</button>
+    </div>
+
+    <!-- Onglets de l'accueil : chaque information a son onglet (plus besoin de faire défiler toute la page) -->
+    <div class="dash-tabs" role="tablist" aria-label="Sections de l'accueil">
+      <button type="button" role="tab" id="dtab-comptes" class="dash-tab active" data-dtab="comptes" aria-selected="true" aria-controls="dpanel-comptes"><span class="ic" aria-hidden="true">🏦</span>Comptes</button>
+      <button type="button" role="tab" id="dtab-activite" class="dash-tab" data-dtab="activite" aria-selected="false" tabindex="-1" aria-controls="dpanel-activite"><span class="ic" aria-hidden="true">🧾</span>Activité</button>
+      <button type="button" role="tab" id="dtab-analyses" class="dash-tab" data-dtab="analyses" aria-selected="false" tabindex="-1" aria-controls="dpanel-analyses"><span class="ic" aria-hidden="true">📊</span>Analyses</button>
+      <button type="button" role="tab" id="dtab-projection" class="dash-tab" data-dtab="projection" aria-selected="false" tabindex="-1" aria-controls="dpanel-projection"><span class="ic" aria-hidden="true">📈</span>Projection</button>
+    </div>
+
+    <!-- Onglet Comptes : synthèse du solde + comptes regroupés par type -->
+    <section id="dpanel-comptes" class="dash-panel active" role="tabpanel" aria-labelledby="dtab-comptes">
+      <!-- Synthèse : solde total, fin de mois prévue, échéances, raccourcis -->
+      <section class="dash-hero" aria-label="Synthèse">
+        <div class="balance-card">
+          <button type="button" id="btn-privacy" class="privacy-btn" aria-pressed="false" aria-label="Masquer les montants" title="Masquer / afficher les montants">
+            <svg class="eye-on" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="eye-off" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a19.8 19.8 0 0 1 5.06-5.94M9.9 4.24A10.9 10.9 0 0 1 12 4c7 0 11 7 11 7a19.7 19.7 0 0 1-3.17 4.19M14.12 14.12A3 3 0 1 1 9.88 9.88"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+          <p class="label-small">Solde total <span id="balance-date-label"></span><button type="button" class="info-btn" data-help="solde-total" aria-label="Aide" aria-haspopup="dialog">i</button></p>
+          <p id="display-balance" class="big-amount">0 F</p>
+          <label class="hero-day">Jour du solde
+            <select id="balance-day" aria-label="Jour du solde total"></select>
+          </label>
+          <div id="hero-trend" class="hero-trend"></div>
+          <p class="privacy-pill">Mode discret · touchez l'œil pour afficher</p>
+          <div class="hero-stats">
+            <div class="hero-stat"><span>Fin de mois <span class="nw">prévu<button type="button" class="info-btn" data-help="fin-de-mois" aria-label="Aide" aria-haspopup="dialog">i</button></span></span><b id="hero-eom">—</b></div>
+            <div class="hero-stat"><span>À venir <span class="nw">(30 jours)<button type="button" class="info-btn" data-help="a-venir" aria-label="Aide" aria-haspopup="dialog">i</button></span></span><b id="hero-upcoming">—</b></div>
+          </div>
+          <p id="sync-status" class="sync-label">Non synchronisé</p>
+        </div>
+        <div class="hero-side">
+          <div class="balance-date-row">
+            <label for="balance-date-picker">Solde au</label>
+            <input type="date" id="balance-date-picker"/>
+            <button id="btn-balance-date-today" class="chip-btn" title="Revenir à aujourd'hui">📅 Aujourd'hui</button>
+          </div>
+          <div class="quick-actions" role="group" aria-label="Raccourcis">
+            <button type="button" id="qa-expense" class="qa-btn"><span aria-hidden="true">➕</span>Opération</button>
+            <button type="button" id="qa-transfer" class="qa-btn"><span aria-hidden="true">🔄</span>Virement</button>
+            <button type="button" id="qa-scheduled" class="qa-btn"><span aria-hidden="true">🔁</span>Échéances</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dans les 7 jours : les prochaines échéances, juste sous le solde (masquée quand il n'y a rien) -->
+      <section id="soon-card" class="dash-card soon-card hidden" aria-label="Dans les 7 jours">
+        <div class="soon-head">
+          <h3>Dans les 7 jours<button type="button" class="info-btn" data-help="a-venir" aria-label="Aide" aria-haspopup="dialog">i</button></h3>
+          <button type="button" id="soon-all" class="link-btn">Tout voir ›</button>
+        </div>
+        <ul id="soon-list" class="tx-list"></ul>
+      </section>
+
+      <!-- Comptes regroupés par type, avec sous-totaux -->
+      <div id="list-accounts"></div>
+    </section>
+
+    <!-- Onglet Activité : échéances à venir et dernières opérations (blocs dépliables, choix mémorisé) -->
+    <section id="dpanel-activite" class="dash-panel" role="tabpanel" aria-labelledby="dtab-activite">
+      <details id="fold-upcoming" class="cfg-section" open>
+        <summary>📅 À venir · 30 jours<button type="button" class="info-btn" data-help="a-venir" aria-label="Aide" aria-haspopup="dialog">i</button> <span class="fold-meta" id="upcoming-meta"></span></summary>
+        <div class="cfg-body">
+          <ul id="list-upcoming" class="tx-list"></ul>
+        </div>
+      </details>
+      <details id="fold-recent" class="cfg-section">
+        <summary>🧾 Dernières opérations <span class="fold-meta" id="recent-meta"></span></summary>
+        <div class="cfg-body">
+          <ul id="list-recent" class="tx-list">
+            <li class="empty-state">Aucune opération</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <!-- Onglet Analyses : évolution du patrimoine et statistiques du mois -->
+    <section id="dpanel-analyses" class="dash-panel" role="tabpanel" aria-labelledby="dtab-analyses">
+      <!-- Évolution du solde -->
+      <div class="section dash-card">
+        <div class="card-head">
+          <h3 style="margin:0">Évolution du solde (12 mois)<button type="button" class="info-btn" data-help="evolution-solde" aria-label="Aide" aria-haspopup="dialog">i</button></h3>
+          <div class="head-tools">
+            <select id="wealth-account" class="head-select" aria-label="Comptes affichés">
+              <option value="__total" selected>Comptes du solde total</option>
+              <option value="">Tous les comptes</option>
+            </select>
+            <select id="wealth-day" class="head-select" aria-label="Jour du mois où le solde est lu"></select>
+          </div>
+        </div>
+        <div id="wealth-chart" style="overflow-x:auto"></div>
+        <div id="wealth-meta"></div>
+      </div>
+
+      <!-- Statistiques du mois -->
+      <div class="section dash-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="margin:0">Statistiques<button type="button" class="info-btn" data-help="revenus-depenses" aria-label="Aide" aria-haspopup="dialog">i</button></h3>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button id="btn-stats-prev" class="icon-btn nav-arrow" aria-label="Mois précédent">◀</button>
+            <span id="stats-month-label" style="font-size:0.88rem;font-weight:600;color:var(--primary);min-width:96px;text-align:center"></span>
+            <button id="btn-stats-next" class="icon-btn nav-arrow" aria-label="Mois suivant">▶</button>
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <select id="stats-account" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:0.85rem;background:var(--bg);color:var(--text)">
+            <option value="">Tous les comptes</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <div class="stat-card" style="background:var(--card);border-radius:12px;padding:12px 16px;flex:1;box-shadow:var(--shadow)">
+            <div style="font-size:0.76rem;color:var(--muted);margin-bottom:4px">REVENUS</div>
+            <div id="stat-income" style="font-weight:700;color:var(--accent);font-size:1rem"></div>
+          </div>
+          <div class="stat-card" style="background:var(--card);border-radius:12px;padding:12px 16px;flex:1;box-shadow:var(--shadow)">
+            <div style="font-size:0.76rem;color:var(--muted);margin-bottom:4px">DÉPENSES</div>
+            <div id="stat-expense" style="font-weight:700;color:var(--danger);font-size:1rem"></div>
+          </div>
+          <div class="stat-card" style="background:var(--card);border-radius:12px;padding:12px 16px;flex:1;box-shadow:var(--shadow)">
+            <div style="font-size:0.76rem;color:var(--muted);margin-bottom:4px">SOLDE</div>
+            <div id="stat-net" style="font-weight:700;font-size:1rem"></div>
+          </div>
+        </div>
+        <div id="stat-compare" class="stat-compare"></div>
+        <div class="flow-card">
+          <div class="flow-title"><span>Revenus et dépenses · 12 mois<button type="button" class="info-btn" data-help="flux-12-mois" aria-label="Aide" aria-haspopup="dialog">i</button></span> <span class="legend"><i style="background:#43a047"></i>revenus <i style="background:#e53935"></i>dépenses</span></div>
+          <div id="flow-chart" style="overflow-x:auto"></div>
+          <div id="flow-avg" class="flow-avg"></div>
+        </div>
+        <div id="stat-categories" style="background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow)"></div>
+        <div id="stat-extra"></div>
+      </div>
+    </section>
+
+    <!-- Onglet Projection -->
+    <section id="dpanel-projection" class="dash-panel" role="tabpanel" aria-labelledby="dtab-projection">
+      <!-- Projection -->
+      <div class="section dash-card proj-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="margin:0">Projection<button type="button" class="info-btn" data-help="projection" aria-label="Aide" aria-haspopup="dialog">i</button></h3>
+        </div>
+        <div id="projection-panel">
+          <fieldset id="proj-accounts" class="acc-checks"></fieldset>
+          <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <select id="proj-horizon" style="flex:1;min-width:100px">
+              <option value="6">6 mois</option>
+              <option value="12" selected>1 an</option>
+              <option value="24">2 ans</option>
+              <option value="60">5 ans</option>
+            </select>
+            <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:100px">
+              <label style="font-size:0.8rem;color:var(--muted);white-space:nowrap;margin:0">Jour :</label><button type="button" class="info-btn" data-help="jour-releve" aria-label="Aide" aria-haspopup="dialog">i</button>
+              <input type="number" id="proj-cutday" min="1" max="31" placeholder="31" style="width:55px;padding:8px;text-align:center;font-weight:700" inputmode="numeric"/>
+            </div>
+          </div>
+          <div id="proj-summary"></div>
+          <div id="proj-chart" style="overflow-x:auto;margin-bottom:12px"></div>
+          <div id="proj-table" style="overflow-x:auto;font-size:0.8rem"></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ---- TAB : Opérations ---- -->
+  <div id="tab-operations" class="tab-content">
+    <header class="top-header">
+      <h2 id="ops-title">Toutes les opérations</h2>
+      <div class="header-actions">
+        <button id="btn-sort-ops" class="icon-btn" title="Trier" aria-label="Changer l'ordre de tri">⬇️</button>
+        <button id="btn-print-ops" class="icon-btn" title="Imprimer" aria-label="Imprimer la liste">🖨️</button>
+      </div>
+    </header>
+    <!-- Navigation mois (visible seulement si un compte est sélectionné) -->
+    <div id="ops-month-nav" class="hidden" style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:12px;padding:6px 8px;margin-bottom:10px;box-shadow:var(--shadow)">
+      <button id="btn-ops-month-prev" class="icon-btn nav-arrow" aria-label="Mois précédent">◀</button>
+      <div style="text-align:center">
+        <div id="ops-month-label" style="font-weight:700;color:var(--primary);font-size:0.95rem"></div>
+        <div id="ops-month-balance" style="font-size:0.8rem;color:var(--muted);margin-top:2px"></div>
+      </div>
+      <button id="btn-ops-month-next" class="icon-btn nav-arrow" aria-label="Mois suivant">▶</button>
+    </div>
+    <div class="ops-toolbar">
+      <input type="search" id="filter-search" class="input-search" placeholder="🔍 Mot, montant, catégorie…" aria-label="Rechercher une opération" autocomplete="off"/>
+      <button type="button" id="btn-toggle-filters" class="chip-btn" aria-expanded="false" aria-controls="ops-filters">⚙️ Filtres <span id="filters-badge" class="badge hidden">0</span></button>
+    </div>
+    <div id="ops-filters" class="ops-filters hidden">
+      <select id="filter-account" class="span2" aria-label="Compte">
+        <option value="">Tous les comptes</option>
+      </select>
+      <select id="filter-type" class="span2" aria-label="Type d'opération">
+        <option value="">Débits + Crédits</option>
+        <option value="debit">Débits</option>
+        <option value="credit">Crédits</option>
+      </select>
+      <select id="filter-category" class="span2" aria-label="Catégorie">
+        <option value="">Toutes catégories</option>
+        <option value="Alimentation">🛒 Alimentation</option>
+        <option value="Transport">🚗 Transport</option>
+        <option value="Sante">💊 Santé</option>
+        <option value="Loisirs">🎉 Loisirs</option>
+        <option value="Logement">🏠 Logement</option>
+        <option value="Telecom">📱 Telecom</option>
+        <option value="Revenus">💰 Revenus</option>
+        <option value="Autre">📦 Autre</option>
+      </select>
+      <label>Du
+        <input type="date" id="filter-date-from"/>
+      </label>
+      <label>Au
+        <input type="date" id="filter-date-to"/>
+      </label>
+      <input type="number" id="filter-amount-min" placeholder="Montant min" aria-label="Montant minimum" inputmode="numeric"/>
+      <input type="number" id="filter-amount-max" placeholder="Montant max" aria-label="Montant maximum" inputmode="numeric"/>
+      <button type="button" id="btn-filter-reset" class="btn-secondary span2">✕ Réinitialiser les filtres</button>
+    </div>
+    <p id="ops-summary" class="ops-summary hidden" role="status"></p>
+    <ul id="list-operations" class="op-list">
+      <li class="empty-state">Aucune opération</li>
+    </ul>
+  </div>
+
+  <!-- ---- TAB : Saisie rapide CB ---- -->
+  <div id="tab-add-expense" class="tab-content">
+    <header class="top-header">
+      <h2>Saisie rapide<button type="button" class="info-btn" data-help="saisie-type" aria-label="Aide" aria-haspopup="dialog">i</button></h2>
+    </header>
+
+    <!-- Toggle Dépense / Virement -->
+    <div class="seg" role="group" aria-label="Type de saisie">
+      <button type="button" id="btn-mode-expense" class="seg-btn active" aria-pressed="true">💳 Opération</button>
+      <button type="button" id="btn-mode-transfer" class="seg-btn" aria-pressed="false">🔄 Virement</button>
+    </div>
+
+    <!-- Formulaire Virement -->
+    <form id="form-transfer" class="card-form hidden">
+      <label>
+        Date
+        <input type="date" id="trf-date" required/>
+      </label>
+      <label>
+        Compte source (débit)
+        <select id="trf-from"></select>
+      </label>
+      <label>
+        Compte destination (crédit)
+        <select id="trf-to"></select>
+      </label>
+      <label>
+        Montant (F CFP)
+        <input type="number" id="trf-amount" placeholder="0" min="1" required inputmode="numeric"/>
+      </label>
+      <label>
+        Commentaire (facultatif)
+        <input type="text" id="trf-comment" placeholder="Ex: Épargne mensuelle" maxlength="200" autocomplete="off"/>
+      </label>
+      <p id="trf-dup-hint" class="dup-hint" role="status" aria-live="polite"></p>
+      <button type="submit" class="btn-primary">🔄 Effectuer le virement</button>
+    </form>
+
+    <form id="form-expense" class="card-form">
+      <label>
+        Montant (F CFP)
+        <input type="number" id="inp-amount" class="amount-input" placeholder="0" min="1" required inputmode="numeric" autocomplete="off" />
+      </label>
+      <div class="seg" role="group" aria-label="Dépense ou revenu">
+        <button type="button" class="seg-btn active" data-type="debit" aria-pressed="true">➖ Dépense</button>
+        <button type="button" class="seg-btn" data-type="credit" aria-pressed="false">➕ Revenu</button>
+      </div>
+      <!-- le select reste la source de vérité du type (lu à l'enregistrement) ; les boutons ci-dessus le pilotent -->
+      <select id="inp-type" class="hidden" aria-hidden="true" tabindex="-1">
+        <option value="debit">Débit (dépense)</option>
+        <option value="credit">Crédit (revenu)</option>
+      </select>
+      <div id="quick-suggest"></div>
+      <label>
+        Libellé
+        <input type="text" id="inp-label" placeholder="Ex: Carrefour" required autocomplete="off" list="label-suggestions" />
+        <datalist id="label-suggestions"></datalist>
+      </label>
+      <label>
+        Catégorie
+        <select id="inp-category">
+          <option value="Alimentation">🛒 Alimentation</option>
+          <option value="Transport">🚗 Transport</option>
+          <option value="Sante">💊 Santé</option>
+          <option value="Loisirs">🎉 Loisirs</option>
+          <option value="Logement">🏠 Logement</option>
+          <option value="Telecom">📱 Telecom</option>
+          <option value="Revenus">💰 Revenus</option>
+          <option value="Autre">📦 Autre</option>
+        </select>
+      </label>
+      <label>
+        Compte
+        <select id="inp-account-name">
+          <option value="courant">courant</option>
+        </select>
+      </label>
+      <label>
+        Date
+        <input type="date" id="inp-date" required />
+      </label>
+      <label id="inp-debit-wrap" class="hidden">
+        Date de prélèvement
+        <input type="date" id="inp-debit"/>
+      </label>
+      <label>
+        Commentaire (facultatif)
+        <input type="text" id="inp-comment" placeholder="Ex: cadeau d'anniversaire" maxlength="200" autocomplete="off"/>
+      </label>
+      <p id="inp-dup-hint" class="dup-hint" role="status" aria-live="polite"></p>
+      <button type="submit" class="btn-primary btn-lg">✅ Enregistrer</button>
+    </form>
+    <div id="save-feedback" class="feedback hidden">Enregistré ✓</div>
+  </div>
+
+  <!-- ---- TAB : Paramètres ---- -->
+  <div id="tab-settings" class="tab-content">
+    <header class="top-header"><h2>Paramètres</h2></header>
+
+    <button id="btn-install-app" class="btn-primary hidden" style="background:var(--accent);margin-bottom:12px;width:100%">📲 Installer l'application sur cet appareil</button>
+    <div id="install-hint" class="hidden" style="font-size:0.8rem;color:var(--muted);background:var(--card);padding:10px;border-radius:10px;margin-bottom:12px"></div>
+
+    <details class="cfg-section" open>
+      <summary>🎨 Général</summary>
+      <div class="cfg-body">
+        <div class="settings-row">
+          <span>Mode sombre</span>
+          <label style="position:relative;width:50px;height:28px;margin:0">
+            <input type="checkbox" id="cfg-dark-mode" style="opacity:0;width:0;height:0">
+            <span id="dark-toggle" style="position:absolute;inset:0;background:var(--border);border-radius:14px;cursor:pointer;transition:background 0.3s"></span>
+            <span id="dark-toggle-dot" style="position:absolute;top:3px;left:3px;width:22px;height:22px;background:white;border-radius:50%;transition:transform 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></span>
+          </label>
+        </div>
+        <div class="bg-picker">
+          <span id="bg-label">Fond de l'application</span>
+          <div id="bg-choices" role="radiogroup" aria-labelledby="bg-label"></div>
+          <div class="bg-photo-actions">
+            <button type="button" id="btn-bg-photo" class="btn-secondary">🖼️ Choisir une photo</button>
+            <button type="button" id="btn-bg-photo-remove" class="btn-secondary hidden">Retirer la photo</button>
+          </div>
+          <input type="file" id="bg-photo-input" accept="image/*" hidden/>
+          <label id="bg-visibility-wrap" class="bg-visibility hidden">
+            <span>Visibilité de la photo : <b id="bg-visibility-value">70 %</b></span>
+            <input type="range" id="bg-visibility" min="10" max="100" step="5" value="70"/>
+            <small><span>voilée</span><span>nette</span></small>
+          </label>
+          <p class="muted">Ce choix reste sur cet appareil.</p>
+        </div>
+        <div class="bg-picker">
+          <span id="card-label">Cadre « Solde total »</span>
+          <div id="card-choices" class="swatches" role="radiogroup" aria-labelledby="card-label"></div>
+          <label class="bg-visibility">
+            <span>Visibilité du cadre : <b id="card-visibility-value">100 %</b></span>
+            <input type="range" id="card-visibility" min="0" max="100" step="5" value="100"/>
+            <small><span>invisible</span><span>plein</span></small>
+          </label>
+          <p class="muted">À 0 % (« Invisible »), le solde s'affiche directement sur le fond.</p>
+        </div>
+        <div class="settings-row">
+          <label for="cfg-ask-connect" style="flex:1;flex-direction:row;align-items:center;margin:0;font-size:0.95rem;font-weight:400;color:var(--text);cursor:pointer">Proposer la connexion au démarrage</label>
+          <input type="checkbox" id="cfg-ask-connect" checked style="width:22px;height:22px;accent-color:var(--primary)">
+        </div>
+        <div class="settings-row">
+          <label for="cfg-help-icons" style="flex:1;flex-direction:row;align-items:center;margin:0;font-size:0.95rem;font-weight:400;color:var(--text);cursor:pointer">Afficher les boutons d'aide <span class="info-btn demo" aria-hidden="true">i</span></label>
+          <input type="checkbox" id="cfg-help-icons" checked style="width:22px;height:22px;accent-color:var(--primary)">
+        </div>
+        <div class="settings-row">
+          <label for="cfg-privacy-start" style="flex:1;flex-direction:row;align-items:center;margin:0;font-size:0.95rem;font-weight:400;color:var(--text);cursor:pointer">Démarrer en mode discret<button type="button" class="info-btn" data-help="mode-discret" aria-label="Aide" aria-haspopup="dialog">i</button></label>
+          <input type="checkbox" id="cfg-privacy-start" style="width:22px;height:22px;accent-color:var(--primary)">
+        </div>
+        <div class="settings-row">
+          <span>Compte Google</span>
+          <span id="display-email" class="muted">—</span>
+        </div>
+        <div class="settings-row">
+          <span>Fichier Drive</span>
+          <span class="muted">comptes_data.json</span>
+        </div>
+        <div class="settings-row">
+          <span>Dernière sync</span>
+          <span id="display-lastsync" class="muted">—</span>
+        </div>
+      </div>
+    </details>
+
+    <details class="cfg-section">
+      <summary>🏦 Comptes</summary>
+      <div class="cfg-body">
+        <p class="cfg-sub">Gestion des comptes</p>
+        <div id="cfg-accounts-list"></div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="cfg-new-account" placeholder="Nom du nouveau compte" style="flex:1" aria-label="Nom du nouveau compte"/>
+          <button id="btn-add-account" class="btn-primary" style="flex:0 0 auto;background:var(--accent)">+ Créer</button>
+        </div>
+        <p class="cfg-sub">Comptes inclus dans le solde total<button type="button" class="info-btn" data-help="inclus-total" aria-label="Aide" aria-haspopup="dialog">i</button></p>
+        <div id="cfg-total-accounts" style="display:flex;flex-direction:column;gap:6px"></div>
+        <p class="cfg-sub">💳 Carte à débit différé<button type="button" class="info-btn" data-help="config-carte" aria-label="Aide" aria-haspopup="dialog">i</button></p>
+        <label>Compte carte
+          <select id="cfg-card-account"></select>
+        </label>
+        <label>Jour d’arrêté (remise à zéro)
+          <input type="number" id="cfg-card-cycle" min="1" max="31" placeholder="26" inputmode="numeric"/>
+        </label>
+          <label>Jour de prélèvement (si différent)
+            <input type="number" id="cfg-card-debit" min="1" max="31" placeholder="même jour" inputmode="numeric"/>
+        </label>
+        <label>Plafond carte (F CFP)
+          <input type="number" id="cfg-card-limit" min="0" placeholder="500000" inputmode="numeric"/>
+        </label>
+        <button id="btn-save-card-cfg" class="btn-primary" style="background:var(--accent)">💾 Enregistrer la config carte</button>
+      </div>
+    </details>
+
+    <details class="cfg-section">
+      <summary>🏷️ Catégories, budgets &amp; alertes</summary>
+      <div class="cfg-body">
+        <p class="cfg-sub">Catégories et sous-catégories<button type="button" class="info-btn" data-help="gerer-categories" aria-label="Aide" aria-haspopup="dialog">i</button></p>
+        <p id="cfg-cat-summary" style="margin:0;font-size:0.85rem;color:var(--muted)"></p>
+        <button type="button" id="btn-manage-cats" class="btn-primary" style="background:var(--accent)">🏷️ Gérer les catégories</button>
+        <p class="cfg-sub">Budgets mensuels par catégorie</p>
+        <div id="cfg-budgets" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button id="btn-save-budgets" class="btn-primary" style="background:var(--accent)">💾 Enregistrer les budgets</button>
+        <p class="cfg-sub">Alertes de solde minimum</p>
+        <div id="cfg-alerts" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button id="btn-save-alerts" class="btn-primary" style="background:var(--accent)">💾 Enregistrer les alertes</button>
+      </div>
+    </details>
+
+    <details class="cfg-section">
+      <summary>☁️ Synchronisation, import &amp; export</summary>
+      <div class="cfg-body">
+        <p class="cfg-sub">Synchronisation Drive</p>
+        <div style="display:flex;gap:8px">
+          <button id="btn-force-upload" class="btn-primary" style="flex:1;background:var(--accent)">⬆️ Envoyer vers Drive</button>
+          <button id="btn-force-download" class="btn-secondary" style="flex:1">⬇️ Récupérer de Drive</button>
+        </div>
+        <div id="sync-detail" style="font-size:0.78rem;color:var(--muted)"></div>
+        <p class="cfg-sub">Import depuis le site bancaire</p>
+        <button id="btn-open-paste-import" class="btn-primary" style="background:var(--accent)">📋 Coller des opérations bancaires</button>
+        <p class="cfg-sub">Import données existantes</p>
+        <button id="btn-import-bdu" class="btn-primary" style="background:var(--accent)">📂 Importer comptes_data.json</button>
+        <div id="import-status" class="hidden" style="font-size:0.8rem;color:var(--accent);text-align:center"></div>
+        <p class="cfg-sub">Export CSV</p>
+        <div style="display:flex;gap:8px">
+          <select id="cfg-export-account" style="flex:1" aria-label="Compte à exporter"></select>
+          <button id="btn-export-csv" class="btn-primary" style="flex:0 0 auto;background:var(--accent);padding:10px 16px">📊 Exporter</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="cfg-section">
+      <summary>💾 Sauvegardes</summary>
+      <div class="cfg-body">
+        <p class="cfg-sub">Sauvegardes locales</p>
+        <div id="backup-list" style="font-size:0.8rem;color:var(--muted)"></div>
+        <div style="display:flex;gap:8px">
+          <button id="btn-backup-download" class="btn-secondary" style="flex:1">💾 Télécharger</button>
+          <button id="btn-backup-restore" class="btn-secondary" style="flex:1">📂 Restaurer</button>
+        </div>
+        <input type="file" id="backup-file-input" accept=".json" style="display:none"/>
+        <p class="cfg-sub">Sauvegarde automatique sur le PC</p>
+        <p class="muted" style="font-size:0.78rem">Une copie par jour est enregistrée dans le dossier choisi : à l'ouverture, après chaque modification et quand vous réduisez l'application. Les 10 derniers jours sont gardés. Documents, Bureau et Téléchargements sont refusés par Chrome : créez un dossier à l'intérieur et choisissez-le.</p>
+        <button id="btn-backup-dir-allow" class="btn-primary hidden">🔓 Réautoriser ce dossier</button>
+        <div style="display:flex;gap:8px">
+          <button id="btn-backup-dir" class="btn-secondary" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📁 Choisir le dossier</button>
+          <button id="btn-backup-dir-clear" class="hidden" style="width:46px;height:46px;padding:0;border:1.5px solid var(--danger);border-radius:10px;background:var(--bg);color:var(--danger);font-size:1rem;cursor:pointer" aria-label="Retirer le dossier de sauvegarde">✕</button>
+        </div>
+        <p id="backup-dir-status" role="status" style="font-size:0.78rem;color:var(--muted)"></p>
+        <p id="backup-dir-note" class="field-hint" role="status"></p>
+      </div>
+    </details>
+
+    <details class="cfg-section">
+      <summary>🔒 Sécurité</summary>
+      <div class="cfg-body">
+        <p class="cfg-sub">Mot de passe</p>
+        <div id="pwd-status" style="font-size:0.85rem"></div>
+        <input type="password" id="cfg-pwd-new" placeholder="Nouveau mot de passe" autocomplete="new-password" aria-label="Nouveau mot de passe"/>
+        <input type="password" id="cfg-pwd-confirm" placeholder="Confirmer le mot de passe" autocomplete="new-password" aria-label="Confirmer le mot de passe"/>
+        <div style="display:flex;gap:8px">
+          <button id="btn-pwd-set" class="btn-primary" style="flex:1;background:var(--accent)">💾 Définir</button>
+          <button id="btn-pwd-remove" style="padding:10px 16px;min-height:46px;border:1.5px solid var(--danger);border-radius:10px;background:var(--bg);color:var(--danger);font-size:0.9rem;font-weight:600;cursor:pointer">Supprimer</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="cfg-section">
+      <summary>🛠️ Application</summary>
+      <div class="cfg-body">
+        <button id="btn-check-update" class="btn-secondary" style="width:100%">🔄 Vérifier les mises à jour</button>
+        <p id="update-status" style="font-size:0.78rem;color:var(--muted);text-align:center"></p>
+        <button id="btn-logout" class="btn-secondary">Se déconnecter</button>
+        <p id="app-version" style="font-size:0.75rem;color:var(--muted);text-align:center">Version —</p>
+      </div>
+    </details>
+
+    <details class="cfg-section danger">
+      <summary>⚠️ Zone dangereuse</summary>
+      <div class="cfg-body">
+        <p class="cfg-sub">Efface définitivement toutes les données de cet appareil.</p>
+        <button id="btn-reset" class="btn-secondary" style="color:var(--danger);border-color:var(--danger)">🗑️ Réinitialiser toutes les données</button>
+      </div>
+    </details>
+  </div>
+
+  <!-- ---- TAB : Opérations programmées ---- -->
+  <div id="tab-scheduled" class="tab-content">
+    <header class="top-header">
+      <h2>Programmées<button type="button" class="info-btn" data-help="programmees" aria-label="Aide" aria-haspopup="dialog">i</button></h2>
+      <div class="header-actions">
+        <button id="btn-print-scheduled" class="icon-btn" title="Imprimer" aria-label="Imprimer les opérations programmées">🖨️</button>
+        <button id="btn-add-scheduled" class="icon-btn" title="Nouvelle">➕</button>
+      </div>
+    </header>
+
+    <!-- Formulaire création (masqué par défaut) -->
+    <div id="form-scheduled-wrap" class="card-form hidden">
+      <h3 style="margin-bottom:12px">Nouvelle opération programmée</h3>
+      <form id="form-scheduled">
+        <label>Libellé
+          <input type="text" id="sch-label" placeholder="Ex: Loyer" required autocomplete="off"/>
+        </label>
+        <label>Montant (F CFP)
+          <input type="number" id="sch-amount" placeholder="0" min="1" required inputmode="numeric"/>
+        </label>
+        <label>Type
+          <select id="sch-type">
+            <option value="debit">Débit (dépense)</option>
+            <option value="credit">Crédit (revenu)</option>
+            <option value="virement">Virement (transfert)</option>
+          </select>
+        </label>
+        <label>Compte
+          <select id="sch-account"></select>
+        </label>
+        <label id="sch-dest-wrap" class="hidden">
+          Compte destination
+          <select id="sch-dest"></select>
+        </label>
+        <label>Catégorie
+          <select id="sch-category">
+            <option value="Alimentation">🛒 Alimentation</option>
+            <option value="Transport">🚗 Transport</option>
+            <option value="Sante">💊 Santé</option>
+            <option value="Loisirs">🎉 Loisirs</option>
+            <option value="Logement">🏠 Logement</option>
+            <option value="Telecom">📱 Telecom</option>
+            <option value="Revenus">💰 Revenus</option>
+            <option value="Autre">📦 Autre</option>
+          </select>
+        </label>
+        <label>Fréquence
+          <select id="sch-freq">
+            <option value="mensuelle">Mensuelle</option>
+            <option value="bimensuelle">Bimensuelle</option>
+            <option value="trimestrielle">Trimestrielle</option>
+            <option value="annuelle">Annuelle</option>
+            <option value="ponctuelle">Ponctuelle (une fois)</option>
+          </select>
+        </label>
+        <label>Prochaine échéance
+          <input type="date" id="sch-next" required/>
+        </label>
+        <label id="sch-apply-wrap" class="hidden">Appliquer les changements
+          <select id="sch-apply">
+            <option value="future">À partir de cette date (passé gardé)</option>
+            <option value="all">Aussi le passé (soldes modifiés)</option>
+          </select>
+        </label>
+        <label>Date de fin (optionnel)
+          <input type="date" id="sch-end"/>
+        </label>
+        <label>Commentaire (facultatif)
+          <input type="text" id="sch-comment" maxlength="200" autocomplete="off"/>
+        </label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button type="submit" class="btn-primary" style="flex:1">✅ Enregistrer</button>
+          <button type="button" id="btn-cancel-scheduled" class="btn-secondary" style="flex:1">Annuler</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Liste -->
+    <ul id="list-scheduled" class="op-list" style="margin-top:8px">
+      <li class="empty-state">Aucune opération programmée</li>
+    </ul>
+  </div>
+
+</div><!-- /screen-main -->
+
+<!-- Rechercher une opération (bouton 🔍). Placée avant « Modifier » pour que celle-ci s'ouvre par-dessus. -->
+<div id="modal-search" class="modal sheet hidden" role="dialog" aria-modal="true" aria-labelledby="s-title">
+  <div class="modal-content info-sheet search-sheet">
+    <div class="info-head">
+      <h3 id="s-title">Rechercher</h3>
+      <button type="button" id="s-close" class="info-x" aria-label="Fermer">✕</button>
+    </div>
+    <input type="search" id="s-query" placeholder="Mot, montant, catégorie, mois…" aria-label="Rechercher une opération" autocomplete="off" enterkeyhint="search"/>
+    <div class="s-filters">
+      <select id="s-period" aria-label="Période">
+        <option value="">Toutes les dates</option><option value="mois">Ce mois</option><option value="3mois">3 derniers mois</option><option value="annee">Cette année</option>
+      </select>
+      <select id="s-account" aria-label="Compte"><option value="">Tous les comptes</option></select>
+      <select id="s-type" aria-label="Dépenses ou revenus">
+        <option value="">Tous types</option><option value="debit">Dépenses</option><option value="credit">Revenus</option>
+      </select>
+      <select id="s-pointed" aria-label="Pointage">
+        <option value="">Pointées ou non</option><option value="oui">Pointées</option><option value="non">Non pointées</option>
+      </select>
+    </div>
+    <p id="s-total" class="s-total" role="status"></p>
+    <ul id="s-results" class="s-results"></ul>
+    <div class="modal-buttons">
+      <button type="button" id="s-cancel" class="btn-secondary">Fermer</button>
+      <button type="button" id="s-print" class="btn-primary">🖨️ Imprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Modifier opération -->
+<div id="modal-edit-op" class="modal hidden">
+  <div class="modal-content form-box">
+    <h3>Modifier l'opération</h3>
+    <div class="form-grid">
+      <label>Date
+        <input type="date" id="edit-op-date"/>
+      </label>
+      <label>Montant (F CFP)
+        <input type="number" id="edit-op-amount" min="1" inputmode="numeric"/>
+      </label>
+      <label class="span-2">Libellé
+        <input type="text" id="edit-op-label" autocomplete="off"/>
+      </label>
+      <label>Type
+        <select id="edit-op-type">
+          <option value="debit">Dépense</option>
+          <option value="credit">Revenu</option>
+          <option value="virement">Virement</option>
+        </select>
+      </label>
+      <label>Catégorie
+        <select id="edit-op-category">
+          <option value="Alimentation">🛒 Alimentation</option>
+          <option value="Transport">🚗 Transport</option>
+          <option value="Sante">💊 Santé</option>
+          <option value="Loisirs">🎉 Loisirs</option>
+          <option value="Logement">🏠 Logement</option>
+          <option value="Telecom">📱 Telecom</option>
+          <option value="Revenus">💰 Revenus</option>
+          <option value="Autre">📦 Autre</option>
+        </select>
+      </label>
+      <label>Compte
+        <select id="edit-op-account"></select>
+      </label>
+      <label id="edit-op-dest-wrap" class="hidden">
+        Compte destination
+        <select id="edit-op-dest"></select>
+      </label>
+      <label id="edit-op-debit-wrap" class="hidden">Prélevé le
+        <input type="date" id="edit-op-debit"/>
+      </label>
+      <label class="span-all">Commentaire (facultatif)
+        <input type="text" id="edit-op-comment" maxlength="200" autocomplete="off"/>
+      </label>
+    </div>
+    <div class="modal-buttons">
+      <button id="edit-op-confirm" class="btn-primary">✅ Enregistrer</button>
+      <button id="edit-op-delete" class="btn-secondary" style="color:var(--danger);border-color:var(--danger)">🗑 Supprimer</button>
+      <button id="edit-op-cancel" class="btn-secondary">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Passer opération -->
+<div id="modal-passer" class="modal hidden">
+  <div class="modal-content form-box">
+    <h3>Passer l'opération</h3>
+    <div id="modal-passer-label" style="font-weight:600;color:var(--primary);margin:-8px 0 4px"></div>
+    <div class="form-grid">
+      <label>Date
+        <input type="date" id="modal-passer-date"/>
+      </label>
+      <label>Montant (F CFP)
+        <input type="number" id="modal-passer-amount" min="1" inputmode="numeric"/>
+      </label>
+      <label class="span-2">Échéance concernée
+        <select id="modal-passer-occ"></select>
+      </label>
+      <label id="modal-passer-match" class="check-row hidden span-all">
+        <input type="checkbox" id="modal-passer-already"/><span id="modal-passer-found" class="pv"></span>
+      </label>
+      <label>Type
+        <select id="modal-passer-type">
+          <option value="debit">Dépense</option>
+          <option value="credit">Revenu</option>
+        </select>
+      </label>
+      <label class="span-all">Commentaire (facultatif)
+        <input type="text" id="modal-passer-comment" maxlength="200" autocomplete="off"/>
+      </label>
+      <p id="modal-passer-hint" class="field-hint span-rest" role="status"></p>
+    </div>
+    <div class="modal-buttons">
+      <button id="modal-passer-confirm" class="btn-primary">✅ Confirmer</button>
+      <button id="modal-passer-cancel" class="btn-secondary">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import par collage bancaire -->
+<div id="modal-paste-import" class="modal hidden">
+  <div class="modal-content" style="max-width:95%">
+    <!-- Étape 1 : Coller -->
+    <div id="paste-step1">
+      <h3>Étape 1 — Coller les données</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px">Copiez les opérations depuis votre site bancaire et collez-les ici</p>
+      <textarea id="paste-input" rows="8" style="width:100%;font-size:0.8rem;font-family:monospace;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);resize:vertical" placeholder="Collez ici les opérations copiées sur le site de votre banque : la liste de la carte est reconnue toute seule."></textarea>
+      <div id="paste-batches" style="margin-top:8px;font-size:0.8rem;color:var(--muted)"></div>
+      <div class="modal-buttons" style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <label style="font-size:0.8rem;color:var(--muted);white-space:nowrap;margin:0">Ignorer
+          <input type="number" id="paste-skip-rows" min="0" value="0" style="width:40px;padding:4px;text-align:center;font-size:0.85rem" inputmode="numeric"/>
+          lignes</label>
+        <button id="btn-paste-add" class="btn-secondary" style="flex:0 0 auto;padding:8px 12px;font-size:0.85rem">➕ Ajouter un collage</button>
+        <button id="btn-paste-parse" class="btn-primary" style="flex:1">Analyser ➡️</button>
+        <button id="btn-paste-cancel" class="btn-secondary" style="flex:0 0 auto">Annuler</button>
+      </div>
+    </div>
+
+    <!-- Étape 2 : Nettoyer les colonnes -->
+    <!-- Format du site bancaire reconnu : vérification avant import -->
+    <div id="paste-bank" class="hidden">
+      <p id="bank-summary" class="bank-summary" role="status"></p>
+      <label>Compte <select id="bank-account"></select></label>
+      <label id="bank-rule-wrap" class="bank-rule hidden"><input type="checkbox" id="bank-rule"/> <span id="bank-rule-text"></span></label>
+      <div id="bank-list"></div>
+      <div class="modal-buttons">
+        <button type="button" id="bank-back" class="btn-secondary btn-back">⬅️ Retour</button>
+        <button type="button" id="bank-import" class="btn-primary">✅ Valider</button>
+      </div>
+    </div>
+
+    <div id="paste-step2" class="hidden">
+      <h3>Étape 2 — Configurer les colonnes</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:4px">Cliquez sur ✕ pour supprimer une colonne, puis assignez chaque rôle</p>
+      <p style="font-size:0.78rem;color:var(--warning);margin-bottom:8px" id="paste-col-warning"></p>
+      <div id="paste-columns" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="paste-preview" style="margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <label style="flex:1;min-width:120px">Compte destination
+          <select id="paste-account"></select>
+        </label>
+        <label style="flex:1;min-width:120px">Catégorie par défaut
+          <select id="paste-category">
+            <option value="Autre">📦 Autre</option>
+            <option value="Alimentation">🛒 Alimentation</option>
+            <option value="Transport">🚗 Transport</option>
+            <option value="Sante">💊 Santé</option>
+            <option value="Loisirs">🎉 Loisirs</option>
+            <option value="Logement">🏠 Logement</option>
+            <option value="Telecom">📱 Telecom</option>
+            <option value="Revenus">💰 Revenus</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-buttons" style="gap:8px">
+        <button id="btn-paste-back" class="btn-secondary btn-back">⬅️ Retour</button>
+        <button id="btn-paste-next" class="btn-primary" style="flex:1">Revue des opérations ➡️</button>
+      </div>
+    </div>
+
+    <!-- Étape 3 : Revue et catégories -->
+    <div id="paste-step3" class="hidden">
+      <h3>Étape 3 — Vérifier et catégoriser</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px">Choisissez la catégorie de chaque opération puis importez</p>
+      <div id="paste-review" style="margin-bottom:10px"></div>
+      <div class="modal-buttons" style="gap:8px">
+        <button id="btn-paste-back2" class="btn-secondary btn-back">⬅️ Retour</button>
+        <button id="btn-paste-import" class="btn-primary" style="flex:1">✅ Importer <span id="paste-count"></span> opérations</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Barre validation import -->
+<div id="import-validation-bar" class="hidden" style="position:fixed;bottom:72px;left:0;right:0;background:var(--card);border-top:2px solid var(--warning);padding:10px 16px;display:flex;align-items:center;gap:8px;z-index:150;box-shadow:0 -4px 16px rgba(0,0,0,0.1)">
+  <span id="import-bar-text" style="flex:1;font-size:0.85rem;font-weight:600;color:var(--warning)"></span>
+  <button id="btn-import-validate" style="padding:8px 14px;border:none;border-radius:10px;background:var(--accent);color:white;font-weight:700;font-size:0.85rem;cursor:pointer">✅ Valider</button>
+  <button id="btn-import-cancel" style="padding:8px 14px;border:none;border-radius:10px;background:var(--danger);color:white;font-weight:700;font-size:0.85rem;cursor:pointer">❌ Annuler</button>
+</div>
+
+<!-- Choix modification programmée -->
+<div id="modal-edit-scope" class="modal hidden">
+  <div class="modal-content" style="gap:12px">
+    <h3>Modifier l'opération programmée</h3>
+    <p style="font-size:0.85rem;color:var(--muted)">Cette opération se répète. Que voulez-vous modifier ?</p>
+    <button id="btn-scope-all" class="btn-primary" style="width:100%">🔄 Cette échéance et toutes les futures</button>
+    <p style="font-size:0.75rem;color:var(--muted);margin:-6px 0 0">Les échéances passées ne seront pas modifiées.</p>
+    <button id="btn-scope-one" class="btn-primary" style="width:100%;background:var(--primary-light)">📌 Uniquement cette échéance</button>
+    <button id="btn-scope-cancel" class="btn-secondary" style="width:auto;margin:0 auto">Annuler</button>
+  </div>
+</div>
+
+<!-- Aide -->
+<div id="modal-help" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-head help-head">
+      <h3 style="margin:0">Aide — Finances Perso NC</h3>
+      <button id="btn-help-close" style="background:none;border:none;font-size:1.3rem;cursor:pointer">✕</button>
+    </div>
+    <p class="help-intro">Touchez le bouton <span class="info-btn demo" aria-hidden="true">i</span> à côté d'un titre ou d'un chiffre : une explication courte s'affiche, avec vos propres montants. Vous pouvez masquer ces boutons dans Paramètres › Général.</p>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Comptes
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Comptes</b> affiche le solde de chaque compte au dernier jour du mois en cours.</p>
+        <p>Cliquez sur un compte pour voir ses opérations mois par mois avec le solde après chaque opération.</p>
+        <p>Naviguez entre les mois avec les flèches ◀ ▶. Les mois futurs affichent les opérations programmées.</p>
+        <p>La carte à débit différé 💳 affiche en plus le prochain prélèvement et le tableau de ses opérations.</p>
+        <p>En bas de l'onglet, <b>Encours des cartes · 30 jours</b> donne, pour toutes les cartes à débit différé, l'encours de « aujourd'hui − 30 jours » à aujourd'hui, le plafond restant et le tableau de tous les paiements qui le composent (virements et remboursements exclus), avec sous chacun le plafond restant après ce paiement.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Projection
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Projection</b> simule l'évolution de vos soldes sur les mois à venir, à partir des opérations programmées et des opérations déjà saisies à une date future.</p>
+        <p><b>Compte</b> : « Tous les comptes » additionne tous vos comptes (un virement entre deux comptes ne change pas le total), « Comptes du solde total » reprend le périmètre du solde de l'accueil, ou choisissez un compte.</p>
+        <p><b>Horizon</b> : 6 mois, 1 an, 2 ans ou 5 ans.</p>
+        <p><b>Jour</b> : laissez vide pour le solde en fin de mois, ou saisissez un jour (ex: 25) pour calculer le solde du 26 du mois précédent au 25 du mois en cours.</p>
+        <p>En haut : solde actuel, solde à l'horizon, variation, point le plus bas, et les entrées / sorties « prévues » et « constatées » par mois. Puis le graphique, le solde de chaque compte, les entrées et sorties de chaque mois et le détail des opérations.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Opérations
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Opérations</b> liste toutes les opérations avec filtres : compte, type, catégorie, recherche par libellé, montant et plage de dates. Touchez <b>⚙️ Filtres</b> pour les afficher (la pastille indique combien sont actifs).</p>
+        <p>La recherche ignore les accents et les majuscules ; elle lit le libellé, le commentaire, la catégorie, le compte, le mois et le montant exact (« 12 500 »), avec les mots dans n'importe quel ordre. Le bouton <b>🔍</b> en haut à gauche ouvre la fenêtre <b>Rechercher</b> depuis n'importe quel onglet.</p>
+        <p>La liste se charge par blocs de 100 lignes : continuez à faire défiler, ou touchez « Afficher plus ».</p>
+        <p>Cliquez sur une opération pour la <b>modifier</b> ou la <b>supprimer</b>.</p>
+        <p>Vous pouvez convertir une opération en <b>virement</b> : choisissez "Virement" dans le type et sélectionnez le compte destination.</p>
+        <p>Le bouton 🖨️ ouvre le <b>centre d'impression</b>, réglé sur ce qui est affiché, avec un aperçu : relevé de compte (un mois ou la période de votre choix), relevé de carte pour un prélèvement, feuille de pointage, soldes à une date, bilan d'un mois ou d'une année (catégories et budgets), opérations programmées, projection, ou la liste avec vos filtres. Depuis l'onglet Analyses ou Projection de l'accueil, il s'ouvre sur le bilan ou la projection. Touchez « Imprimer / PDF », puis choisissez « Enregistrer au format PDF » pour garder un fichier.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Saisie opération
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Saisie opération</b> permet de saisir rapidement :</p>
+        <p><b>💳 Dépense / Revenu</b> : créez un débit ou un crédit sur un compte.</p>
+        <p><b>🔄 Virement</b> : transférez de l'argent entre deux comptes. L'app crée automatiquement le débit sur la source et le crédit sur la destination.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Programmées
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Programmées</b> gère les opérations récurrentes (loyer, salaire, prélèvements…).</p>
+        <p><b>Créer</b> : bouton ➕, choisissez la fréquence (mensuelle, trimestrielle, annuelle, ponctuelle) et la date de prochaine échéance.</p>
+        <p><b>Date de fin</b> : optionnelle, l'opération disparaît des projections après cette date.</p>
+        <p><b>Virement programmé</b> : choisissez "Virement" dans le type pour créer un transfert récurrent entre comptes.</p>
+        <p><b>✅ Passer</b> : convertit l'échéance en opération réelle. Vous pouvez modifier le montant pour ce mois uniquement. La prochaine échéance avance automatiquement.</p>
+        <p><b>✏️ Modif.</b> : modifiez le montant, la fréquence ou le compte pour toutes les échéances futures.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Statistiques
+      </button>
+      <div class="help-body hidden">
+        <p>L'onglet <b>Analyses</b> affiche l'évolution du solde sur 12 mois (comptes du solde total, tous les comptes ou un compte) puis, pour le mois sélectionné :</p>
+        <p>• Les <b>revenus</b> et <b>dépenses</b> et le solde net, comparés au mois précédent. Les virements entre comptes ne sont ni des revenus ni des dépenses : ils sont listés à part.</p>
+        <p>• Un graphique <b>revenus / dépenses sur 12 mois</b> avec les moyennes mensuelles et le taux d'épargne.</p>
+        <p>• Les <b>dépenses par catégorie</b> (part du total, variation, budget) et les <b>plus grosses dépenses</b>.</p>
+        <p>Naviguez entre les mois avec ◀ ▶ et filtrez par compte.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Paramètres
+      </button>
+      <div class="help-body hidden">
+        <p><b>Gestion des comptes</b> : créer, renommer ou supprimer un compte.</p>
+        <p><b>Comptes inclus dans le solde total</b> : décochez un compte pour l'exclure du solde affiché en haut.</p>
+        <p><b>Carte à débit différé</b> : configurez le jour de remise à zéro et le plafond pour une carte bancaire.</p>
+        <p><b>Synchronisation Drive</b> : automatique quand vous êtes connecté. ⬆️ synchronise tout de suite ; ⬇️ remplace les données de cet appareil par celles de Drive (avec confirmation).</p>
+        <p><b>Sauvegardes</b> : l'app sauvegarde automatiquement à chaque ouverture (5 dernières conservées). Téléchargez une sauvegarde ou restaurez depuis un fichier. Une restauration remplace vos données, y compris sur Drive et vos autres appareils ; une copie de secours est faite juste avant.</p>
+        <p><b>Mot de passe</b> : protégez l'accès à l'application. Synchronisé via Drive entre tous vos appareils.</p>
+        <p><b>Installer l'app</b> : ajoutez l'icône sur votre écran d'accueil pour un accès rapide et le mode hors ligne.</p>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+        <span class="help-arrow">▶</span> Mode hors ligne
+      </button>
+      <div class="help-body hidden">
+        <p>L'application fonctionne <b>sans connexion internet</b> une fois installée.</p>
+        <p>Toutes vos modifications sont sauvegardées localement sur l'appareil.</p>
+        <p>Quand vous retrouvez la connexion, vos modifications sont envoyées vers Google Drive (si la pastille affiche « Non connecté », touchez-la).</p>
+        <p>Au démarrage, l'application vous propose de vous connecter à Google Drive ; si vous refusez ou si la connexion échoue, elle démarre sans connexion. La pastille en haut à droite indique en permanence si vous êtes <b>connecté</b>, <b>non connecté</b> ou <b>hors ligne</b> : touchez-la pour vous connecter ou synchroniser.</p>
+        <p>Sur plusieurs appareils, vos saisies sont <b>réunies</b> : Drive est relu avant chaque envoi. Si la même opération a été modifiée des deux côtés, la dernière modification est gardée. En cas de panne de Drive, rien n'est remplacé et l'envoi est retenté plus tard.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Proposition de connexion au démarrage (si la connexion n'a pas lieu, l'application démarre sans connexion) -->
+<div id="modal-connect" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="connect-title">
+  <div class="modal-content" style="max-width:380px;text-align:center">
+    <div class="connect-ico" style="font-size:2.4rem;line-height:1" aria-hidden="true">☁️</div>
+    <h3 id="connect-title">Se connecter à Google Drive ?</h3>
+    <p style="font-size:0.88rem;color:var(--muted);line-height:1.5;margin-top:-6px">La connexion synchronise vos comptes entre vos appareils et met vos données en sécurité. Sans connexion, tout reste enregistré sur cet appareil.</p>
+    <button type="button" id="btn-connect-now" class="btn-primary btn-lg">Se connecter avec Google</button>
+    <button type="button" id="btn-connect-skip" class="btn-secondary">Continuer sans connexion</button>
+    <p id="connect-status" style="font-size:0.82rem;color:var(--muted);min-height:1.2em;margin:-6px 0" role="status"></p>
+    <label style="flex-direction:row;justify-content:center;align-items:center;gap:8px;font-size:0.82rem;font-weight:500;margin:0;cursor:pointer">
+      <input type="checkbox" id="chk-no-ask" style="width:18px;height:18px;accent-color:var(--primary)"> Ne plus me le proposer au démarrage
+    </label>
+  </div>
+</div>
+
+<!-- Classer les opérations sans catégorie (regroupées par libellé) -->
+<div id="modal-categorize" class="modal sheet hidden" role="dialog" aria-modal="true" aria-labelledby="cat-title">
+  <div class="modal-content info-sheet cat-sheet">
+    <div class="info-head">
+      <h3 id="cat-title">Classer les opérations<button type="button" class="info-btn" data-help="classer" aria-label="Aide" aria-haspopup="dialog">i</button></h3>
+      <button type="button" id="cat-close" class="info-x" aria-label="Fermer">✕</button>
+    </div>
+    <div class="seg" role="group" aria-label="Période">
+      <button type="button" class="seg-btn active" data-cat-scope="12" aria-pressed="true">12 derniers mois</button>
+      <button type="button" class="seg-btn" data-cat-scope="all" aria-pressed="false">Tout l'historique</button>
+    </div>
+    <p id="cat-summary" class="cat-summary"></p>
+    <button type="button" id="cat-apply-all" class="btn-primary hidden"></button>
+    <div id="cat-list" class="cat-list"></div>
+    <div id="cat-skipped" class="cat-skipped"></div>
+    <button type="button" id="cat-manage" class="link-btn">🏷️ Gérer les catégories</button>
+  </div>
+</div>
+
+<!-- Gérer les catégories : liste, création, renommage, suppression -->
+<div id="modal-cats" class="modal sheet hidden" role="dialog" aria-modal="true" aria-labelledby="cm-title">
+  <div class="modal-content info-sheet cm-sheet">
+    <div class="info-head">
+      <h3 id="cm-title">Catégories<button type="button" class="info-btn" data-help="gerer-categories" aria-label="Aide" aria-haspopup="dialog">i</button></h3>
+      <button type="button" id="cm-close" class="info-x" aria-label="Fermer">✕</button>
+    </div>
+    <div class="cm-tools">
+      <input type="search" id="cm-search" placeholder="Rechercher…" autocomplete="off" aria-label="Rechercher une catégorie"/>
+      <button type="button" id="cm-new" class="btn-primary">＋ Nouvelle</button>
+    </div>
+    <p id="cm-summary" class="cat-summary"></p>
+    <div id="cm-todo" class="cat-todo hidden"></div>
+    <div id="cm-list" class="cm-list"></div>
+  </div>
+</div>
+
+<!-- Petit formulaire du gestionnaire de catégories (nom, pictogramme, destination des opérations) -->
+<div id="modal-catedit" class="modal sheet hidden" role="dialog" aria-modal="true" aria-labelledby="ce-title">
+  <div class="modal-content info-sheet">
+    <h3 id="ce-title"></h3>
+    <p id="ce-intro" class="ce-intro hidden"></p>
+    <label id="ce-name-wrap">Nom
+      <input type="text" id="ce-name" maxlength="40" autocomplete="off"/>
+    </label>
+    <label id="ce-icon-wrap">Pictogramme (facultatif)
+      <input type="text" id="ce-icon" maxlength="12" placeholder="🛒" autocomplete="off"/>
+    </label>
+    <label id="ce-target-wrap"><span id="ce-target-label"></span>
+      <select id="ce-target"></select>
+    </label>
+    <p id="ce-note" class="field-hint" role="status"></p>
+    <div class="modal-buttons">
+      <button type="button" id="ce-cancel" class="btn-secondary">Annuler</button>
+      <button type="button" id="ce-ok" class="btn-primary"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Explication d'un chiffre (boutons « i ») -->
+<div id="modal-info" class="modal sheet hidden" role="dialog" aria-modal="true" aria-labelledby="info-title">
+  <div class="modal-content info-sheet">
+    <div class="info-head">
+      <h3 id="info-title"></h3>
+      <button type="button" id="info-close" class="info-x" aria-label="Fermer">✕</button>
+    </div>
+    <div id="info-body" class="info-body"></div>
+    <div class="modal-buttons">
+      <button type="button" id="info-go" class="btn-secondary hidden"></button>
+      <button type="button" id="info-ok" class="btn-primary">Compris</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation avant d'enregistrer quelque chose d'inhabituel (doublon, date lointaine, montant inhabituel…) -->
+<div id="modal-confirm" class="modal sheet hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="modal-content info-sheet">
+    <h3 id="confirm-title"></h3>
+    <div id="confirm-body" class="info-body"></div>
+    <div class="modal-buttons">
+      <button type="button" id="confirm-ok" class="btn-secondary"></button>
+      <button type="button" id="confirm-new" class="btn-secondary hidden"></button>
+      <button type="button" id="confirm-cancel" class="btn-primary"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Centre d'impression : choisir quoi imprimer, voir l'aperçu, puis imprimer ou enregistrer en PDF -->
+<div id="modal-print" class="modal sheet hidden" role="dialog" aria-modal="true" aria-labelledby="print-title">
+  <div class="modal-content info-sheet print-sheet">
+    <div class="info-head">
+      <h3 id="print-title">Imprimer</h3>
+      <button type="button" id="print-close" class="info-x" aria-label="Fermer">✕</button>
+    </div>
+    <div class="print-center">
+      <div class="print-choices">
+        <label class="span-all">Document <select id="print-type"></select></label>
+        <label data-print="compte pointage">Compte <select id="print-account"></select></label>
+        <label data-print="compte pointage">Période
+          <select id="print-period"><option value="mois">Un mois</option><option value="libre">Du … au …</option></select>
+        </label>
+        <label class="span-all" data-print="compte pointage" data-period="mois">Mois <select id="print-month"></select></label>
+        <label data-print="compte pointage" data-period="libre">Du <input type="date" id="print-from"/></label>
+        <label data-print="compte pointage" data-period="libre">Au <input type="date" id="print-to"/></label>
+        <label class="span-all" data-print="bilan echeances">Comptes <select id="print-scope"></select></label>
+        <fieldset id="print-proj-accounts" class="acc-checks span-all" data-print="projection"></fieldset>
+        <label class="span-all" data-print="bilan">Période
+          <select id="print-span"><option value="mois">Un mois</option><option value="annee">Une année</option></select>
+        </label>
+        <label class="span-all" data-print="bilan" data-period="mois">Mois <select id="print-report-month"></select></label>
+        <label class="span-all" data-print="bilan" data-period="annee">Année <select id="print-year"></select></label>
+        <label class="span-all" data-print="projection">Durée <select id="print-horizon"></select></label>
+        <label class="span-all" data-print="carte">Carte <select id="print-card"></select></label>
+        <label class="span-all" data-print="carte">Prélèvement <select id="print-debit"></select></label>
+        <label class="span-all" data-print="soldes">Date <input type="date" id="print-date"/></label>
+        <p class="field-hint span-all" data-print="liste" id="print-list-note"></p>
+        <fieldset class="print-options span-all" data-print="compte carte liste pointage echeances bilan">
+          <legend>Afficher</legend>
+          <label data-print="compte carte liste pointage echeances"><input type="checkbox" id="print-opt-comments"/> Commentaires</label>
+          <label data-print="compte carte liste pointage"><input type="checkbox" id="print-opt-categories"/> Catégories</label>
+          <label data-print="compte"><input type="checkbox" id="print-opt-balance"/> Solde après chaque ligne</label>
+          <label data-print="compte carte liste"><input type="checkbox" id="print-opt-pointed"/> Pointage ✓</label>
+          <label data-print="bilan"><input type="checkbox" id="print-opt-sub"/> Détail des sous-catégories</label>
+          <label data-print="pointage"><input type="checkbox" id="print-opt-unpointed"/> Seulement les non pointées</label>
+        </fieldset>
+        <label class="span-all" data-print="compte carte liste pointage">Ordre
+          <select id="print-order"><option value="asc">Du plus ancien au plus récent</option><option value="desc">Du plus récent au plus ancien</option></select>
+        </label>
+      </div>
+      <div class="print-preview-wrap">
+        <p id="print-info" class="print-info" role="status"></p>
+        <div id="print-preview" class="print-preview" tabindex="0" aria-label="Aperçu avant impression"></div>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button type="button" id="print-cancel" class="btn-secondary">Fermer</button>
+      <button type="button" id="print-go" class="btn-primary">🖨️ Imprimer / PDF</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<div id="chart-tip" class="chart-tip hidden" role="status" aria-live="polite"></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer onerror="window.gsiFailed = true"></script>
+<script src="app.js"></script>
+</body>
+</html>

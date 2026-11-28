@@ -1,0 +1,11 @@
+# Données personnelles : ne jamais versionner (le dépôt est PUBLIC)
+comptes_data.json
+courant.csv
+epargne.csv
+operations_brutes.csv
+operations_programmees.csv
+soldes_comptes.csv
+finances-backup-*.json
+# réglages locaux et copies de secours
+.claude/
+*.bundle
