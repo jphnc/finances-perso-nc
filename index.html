@@ -2,6 +2,8 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
+  <!-- Règle de sécurité : seuls les fichiers de l'application et la connexion Google peuvent s'exécuter ou recevoir des données -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; connect-src 'self' https://www.googleapis.com https://accounts.google.com https://oauth2.googleapis.com; frame-src https://accounts.google.com; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#1a237e" />
   <title>Finances Perso NC</title>
@@ -517,9 +519,6 @@
         <div id="sync-detail" style="font-size:0.78rem;color:var(--muted)"></div>
         <p class="cfg-sub">Import depuis le site bancaire</p>
         <button id="btn-open-paste-import" class="btn-primary" style="background:var(--accent)">📋 Coller des opérations bancaires</button>
-        <p class="cfg-sub">Import données existantes</p>
-        <button id="btn-import-bdu" class="btn-primary" style="background:var(--accent)">📂 Importer comptes_data.json</button>
-        <div id="import-status" class="hidden" style="font-size:0.8rem;color:var(--accent);text-align:center"></div>
         <p class="cfg-sub">Export CSV</p>
         <div style="display:flex;gap:8px">
           <select id="cfg-export-account" style="flex:1" aria-label="Compte à exporter"></select>
@@ -891,7 +890,7 @@
     <p class="help-intro">Touchez le bouton <span class="info-btn demo" aria-hidden="true">i</span> à côté d'un titre ou d'un chiffre : une explication courte s'affiche, avec vos propres montants. Vous pouvez masquer ces boutons dans Paramètres › Général.</p>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Comptes
       </button>
       <div class="help-body hidden">
@@ -904,7 +903,7 @@
     </div>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Projection
       </button>
       <div class="help-body hidden">
@@ -917,7 +916,7 @@
     </div>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Opérations
       </button>
       <div class="help-body hidden">
@@ -931,7 +930,7 @@
     </div>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Saisie opération
       </button>
       <div class="help-body hidden">
@@ -942,7 +941,7 @@
     </div>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Programmées
       </button>
       <div class="help-body hidden">
@@ -956,7 +955,7 @@
     </div>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Statistiques
       </button>
       <div class="help-body hidden">
@@ -969,7 +968,7 @@
     </div>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Paramètres
       </button>
       <div class="help-body hidden">
@@ -978,13 +977,13 @@
         <p><b>Carte à débit différé</b> : configurez le jour de remise à zéro et le plafond pour une carte bancaire.</p>
         <p><b>Synchronisation Drive</b> : automatique quand vous êtes connecté. ⬆️ synchronise tout de suite ; ⬇️ remplace les données de cet appareil par celles de Drive (avec confirmation).</p>
         <p><b>Sauvegardes</b> : l'app garde automatiquement 5 copies de secours différentes (prises à l'ouverture et avant un remplacement des données). Téléchargez une sauvegarde ou restaurez depuis un fichier. Une restauration remplace vos données, y compris sur Drive et vos autres appareils ; une copie de secours est faite juste avant.</p>
-        <p><b>Mot de passe</b> : protégez l'accès à l'application. Synchronisé via Drive entre tous vos appareils.</p>
+        <p><b>Mot de passe</b> : protégez l'accès à l'application. Synchronisé via Drive entre tous vos appareils. Il verrouille l'écran ; il ne chiffre pas les données (appareil, Drive, fichiers de sauvegarde) : protégez aussi l'appareil lui-même.</p>
         <p><b>Installer l'app</b> : ajoutez l'icône sur votre écran d'accueil pour un accès rapide et le mode hors ligne.</p>
       </div>
     </div>
 
     <div class="help-section">
-      <button class="help-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.help-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▶':'▼'">
+      <button type="button" class="help-toggle">
         <span class="help-arrow">▶</span> Mode hors ligne
       </button>
       <div class="help-body hidden">
@@ -1156,7 +1155,7 @@
 <div id="toast" class="toast hidden"></div>
 <div id="chart-tip" class="chart-tip hidden" role="status" aria-live="polite"></div>
 
-<script src="https://accounts.google.com/gsi/client" async defer onerror="window.gsiFailed = true"></script>
 <script src="app.js"></script>
+<script id="gsi-script" src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>

@@ -1,3 +1,6 @@
+// La bibliothèque de connexion Google n'a pas pu se charger (hors ligne, bloquée) : l'application continue sans elle
+window.addEventListener('error', (e) => { if (e.target && e.target.id === 'gsi-script') window.gsiFailed = true; }, true);
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
 }
@@ -118,6 +121,7 @@ document.getElementById('btn-unlock').addEventListener('click', async () => {
     } else {
       showScreen('screen-login');
     }
+    if (damagedData) { startAfterDamage(); return; }
     // Google : synchro silencieuse si un jeton valide existe, sinon proposition de connexion
     initConnectionAtStartup();
   } else {
@@ -310,6 +314,35 @@ function isValidData(d) {
     && d.accounts.every(a => !!a && typeof a.name === 'string')
     && d.operations.every(o => !!o && o.id !== undefined && o.id !== null && typeof o.account === 'string' && typeof o.date === 'string');
 }
+// Les champs techniques d'une donnée venue de l'extérieur (Drive, fichier, mémoire de l'appareil) reprennent leur forme
+// normale : rien de piégé ne peut s'y cacher. Les textes saisis (libellés, noms, commentaires) restent tels quels : ils
+// sont neutralisés à l'affichage.
+function cleanData(data) {
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const toNumber = (x, k) => { if (x[k] !== undefined && x[k] !== null && !Number.isFinite(x[k])) x[k] = Number.isFinite(Number(x[k])) ? Number(x[k]) : 0; };
+  const dropBadDate = (x, k) => { if (x[k] && !isDate(x[k])) delete x[k]; };
+  for (const o of data.operations) {
+    if (!/^[\w-]+$/.test(o.id)) o.id = String(o.id).replace(/[^\w-]/g, '_');
+    if (!isDate(o.date)) o.date = String(o.date || '').replace(/[^\d-]/g, '').slice(0, 10);
+    if (o.type !== 'credit' && o.type !== 'debit') o.type = 'debit';
+    toNumber(o, 'amount');
+    toNumber(o, 'billingShift');
+    for (const k of ['nextPayment', 'endDate', 'debitDate', 'lastPayment']) dropBadDate(o, k);
+    if (o.exceptions !== undefined) o.exceptions = (Array.isArray(o.exceptions) ? o.exceptions : []).filter(m => /^\d{4}-\d{2}$/.test(m));
+  }
+  for (const a of data.accounts || []) {
+    for (const k of ['initialBalance', 'cardLimit', 'billingCycleDay', 'billingDebitDay', 'previousCycleDay']) toNumber(a, k);
+    dropBadDate(a, 'debitRuleFrom');
+  }
+  for (const group of [data.budgets, data.alerts]) {
+    for (const [name, v] of Object.entries(group || {})) {
+      if (v === '' || !Number.isFinite(Number(v))) delete group[name]; else group[name] = Number(v);
+    }
+  }
+  for (const [name, v] of Object.entries(data.catColors || {})) if (!/^#[0-9a-fA-F]{3,8}$/.test(v)) delete data.catColors[name];
+  for (const [name, v] of Object.entries(data.catIcons || {})) if (typeof v !== 'string' || v.length > 16 || /[<>"'&]/.test(v)) delete data.catIcons[name];
+  return data;
+}
 // Réunion de deux versions (appareil et Drive, ou deux fenêtres) : rien ne se perd.
 //  - opérations et comptes : réunis un par un ; modifiés des deux côtés, la modification la plus récente gagne
 //    (à égalité : celle du fichier le plus récent) ; une suppression l'emporte sur les versions plus anciennes qu'elle ;
@@ -370,10 +403,48 @@ function mergeAppData(local, remote) {
   if (Object.keys(deletedAccounts).length) merged.deletedAccounts = deletedAccounts; else delete merged.deletedAccounts;
   return merged;
 }
+let damagedData = null;      // texte illisible trouvé dans la mémoire de l'appareil
 function loadLocal() {
   const raw = localStorage.getItem('finances_data');
-  if (raw) { try { appData = JSON.parse(raw); return true; } catch {} }
-  return false;
+  if (!raw) return false;
+  try {
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.operations) || !data.operations.every(o => o && typeof o === 'object')) throw new Error('forme inattendue');
+    if (!Array.isArray(data.accounts)) data.accounts = [];
+    appData = cleanData(data);
+    return true;
+  } catch (e) {
+    console.warn('Données de l’appareil illisibles :', e.message);
+    damagedData = raw;
+    return false;
+  }
+}
+// Données illisibles : on le dit, on garde le texte abîmé à part, et on propose la dernière copie de secours utilisable
+async function recoverDamagedData() {
+  if (!damagedData) return false;
+  const raw = damagedData;
+  damagedData = null;
+  await deviceDbRun('readwrite', s => s.put(raw, 'damaged')).catch(() => {});
+  const readable = b => { try { return isValidData(JSON.parse(b.data)); } catch { return false; } };
+  const backup = (await readBackups()).reverse().find(readable);
+  if (!backup) {
+    alert('⚠️ Les données de cet appareil sont illisibles et il n’y a pas de copie de secours.\n\nConnectez-vous à Google Drive pour les retrouver, ou restaurez un fichier de sauvegarde (Paramètres › Sauvegardes).');
+    return false;
+  }
+  if (!confirm(`⚠️ Les données de cet appareil sont illisibles.\n\nReprendre la copie de secours du ${backup.date} (${backup.ops} opérations) ?\n\n« Annuler » : continuer sans, puis vous connecter à Google Drive.`)) return false;
+  appData = cleanData(JSON.parse(backup.data));
+  localStorage.removeItem('finances_driverev');          // la prochaine synchronisation réunira cette copie avec Drive
+  saveLocal(false);
+  return true;
+}
+// Suite du démarrage quand les données étaient illisibles : récupération, puis connexion
+async function startAfterDamage() {
+  if (await recoverDamagedData()) {
+    unlocked = true;
+    renderAll();
+    showScreen('screen-main');
+  }
+  initConnectionAtStartup();
 }
 
 // ── GOOGLE AUTH ──────────────────────────────────────────────────────────────
@@ -522,6 +593,7 @@ window.addEventListener('load', () => {
 
   updateConnBadge();
   if (locked) return;
+  if (damagedData) { startAfterDamage(); return; }
   // Google : synchro silencieuse si un jeton valide existe, sinon proposition de connexion
   initConnectionAtStartup();
 });
@@ -582,7 +654,7 @@ async function downloadFromDrive() {
   let data = null;
   try { data = JSON.parse(text); } catch { /* signalé ci-dessous */ }
   if (!isValidData(data)) throw new Error('Le fichier sur Drive n’est pas reconnu : rien n’a été modifié');
-  return data;
+  return cleanData(data);
 }
 function safeBackup() {
   try { autoBackup(); } catch (e) { console.warn('Copie de secours impossible :', e.message); }
@@ -720,6 +792,7 @@ window.addEventListener('storage', (e) => {
   let other = null;
   try { other = JSON.parse(e.newValue); } catch { return; }
   if (!isValidData(other)) return;
+  cleanData(other);
   const mine = dataSignature(appData);
   appData = mergeAppData(appData, other);
   const result = dataSignature(appData);
@@ -1089,6 +1162,26 @@ function getAccountNames() {
   return [...new Set(appData.operations.map(op => op.account).filter(Boolean))];
 }
 
+// ── BOUTONS DES LISTES ───────────────────────────────────────────────────────
+// Un seul écouteur pour les boutons créés par l'application : les données restent des données (attributs), jamais du code.
+// La page interdit d'ailleurs tout code écrit dedans (voir la règle de sécurité en tête de index.html).
+const ACTIONS = {
+  edit: el => editOp(el.dataset.id, el.dataset.date),
+  point: el => togglePointed(el.dataset.id),
+  tab: el => showTab(el.dataset.arg),
+  more: () => showMoreOps(),
+  'account-rename': el => renameAccount(el.dataset.name),
+  'account-delete': el => deleteAccount(el.dataset.name),
+  pass: el => passerScheduled(el.dataset.id),
+  'sched-edit': el => editScheduled(el.dataset.id),
+  'sched-delete': el => deleteScheduled(el.dataset.id),
+};
+// le bouton le plus proche du toucher agit seul (pointer une opération n'ouvre pas la ligne qui l'entoure)
+document.addEventListener('click', (e) => {
+  const el = e.target.closest && e.target.closest('[data-action]');
+  if (el && ACTIONS[el.dataset.action]) ACTIONS[el.dataset.action](el);
+});
+
 // ── RENDU ────────────────────────────────────────────────────────────────────
 let dashboardBalanceDate = null; // null = aujourd'hui, sinon date choisie via le sélecteur
 
@@ -1216,7 +1309,7 @@ function cardDetailsHtml(name) {
   // Tableau des opérations comprises dans la période de référence (du jour de remise à zéro à aujourd'hui)
   let opened = true;
   try { opened = localStorage.getItem('finances_card_detail') !== '0'; } catch { /* stockage indisponible : ouvert */ }
-  const rows = billingInfo.ops.map(o => `<tr class="tx-click" onclick="editOp('${o.id}','${o.date}')">
+  const rows = billingInfo.ops.map(o => `<tr class="tx-click" data-action="edit" data-id="${esc(o.id)}" data-date="${esc(o.date)}">
         <td class="c-date">${o.date.slice(8, 10)}/${o.date.slice(5, 7)}</td>
         <td class="c-label">${esc(o.label)}${chosenDebitDate(o) ? `<small class="c-card">↪ prélevé le ${formatDate(chosenDebitDate(o))}</small>` : ''}${commentHtml(o, 'small')}</td>
         <td class="c-catcol">${esc(o.category || '')}</td>
@@ -1259,7 +1352,7 @@ function movedOpsHtml(name) {
   if (!period || !period.moved.length) return '';
   const dm = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
   return `<div class="kv-detail">Comptées sur un autre prélèvement :${period.moved.map(o =>
-    `<button type="button" class="link-btn moved-op" onclick="editOp('${o.id}','${o.date}')">${dm(o.date)} ${esc(o.label)} · ${fmt(o.amount)} → prélevé le ${dm(chosenDebitDate(o))}</button>`).join('')}</div>`;
+    `<button type="button" class="link-btn moved-op" data-action="edit" data-id="${esc(o.id)}" data-date="${esc(o.date)}">${dm(o.date)} ${esc(o.label)} · ${fmt(o.amount)} → prélevé le ${dm(chosenDebitDate(o))}</button>`).join('')}</div>`;
 }
 
 // Couleur du plafond selon la part utilisée : orange au-delà de 50 %, rouge au-delà de 80 %
@@ -1406,7 +1499,7 @@ function upcomingRowHtml(o) {
   const mShort = d => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '');
   const dest = (String(o.label || '').match(/^\[(.+)\]$/) || [])[1];
   const label = dest ? `Virement vers ${dest}` : o.label;
-  return `<li class="tx-row" onclick="editOp('${o.id}','${o.date}')">
+  return `<li class="tx-row" data-action="edit" data-id="${esc(o.id)}" data-date="${esc(o.date)}">
       <span class="date-chip"><b>${o.date.slice(8, 10)}</b><small>${esc(mShort(o.date))}</small></span>
       <span class="tx-main"><span class="tx-label">${esc(label)}</span><span class="tx-sub">${esc(o.account)}${o.scheduled ? ' · programmée' : ''}</span>${commentHtml(o, 'span')}</span>
       <span class="tx-amt ${o.type}">${o.type === 'credit' ? '+' : '-'}${fmt(o.amount)}</span>
@@ -1422,7 +1515,7 @@ function renderUpcoming() {
   if (!items.length) { el.innerHTML = '<li class="empty-state">Rien de prévu dans les 30 prochains jours</li>'; return; }
   const shown = items.slice(0, 12);
   el.innerHTML = shown.map(upcomingRowHtml).join('') + (items.length > shown.length
-    ? `<li class="more-row"><button type="button" class="btn-secondary" onclick="showTab('scheduled')">Voir les ${items.length - shown.length} autres →</button></li>`
+    ? `<li class="more-row"><button type="button" class="btn-secondary" data-action="tab" data-arg="scheduled">Voir les ${items.length - shown.length} autres →</button></li>`
     : '');
 }
 
@@ -1445,13 +1538,13 @@ function renderRecentOps() {
     if (o.date !== cur) { cur = o.date; html += `<li class="day-head">${esc(dayLabel(o.date, t))}</li>`; }
     const other = (String(o.label || '').match(/^\[(.+)\]$/) || [])[1];
     const label = other ? (o.type === 'credit' ? `Virement depuis ${other}` : `Virement vers ${other}`) : o.label;
-    html += `<li class="tx-row" onclick="editOp('${o.id}','${o.date}')">
-      <span class="avatar sm ${o.type}">${catEmoji(o)}</span>
+    html += `<li class="tx-row" data-action="edit" data-id="${esc(o.id)}" data-date="${esc(o.date)}">
+      <span class="avatar sm ${o.type}">${esc(catEmoji(o))}</span>
       <span class="tx-main"><span class="tx-label">${esc(label)}</span><span class="tx-sub">${esc([o.account, o.category].filter(Boolean).join(' · '))}</span>${commentHtml(o, 'span')}</span>
       <span class="tx-amt ${o.type}">${o.type === 'credit' ? '+' : '-'}${fmt(o.amount)}</span>
     </li>`;
   }
-  el.innerHTML = html + `<li class="more-row"><button type="button" class="btn-secondary" onclick="showTab('operations')">Voir toutes les opérations →</button></li>`;
+  el.innerHTML = html + `<li class="more-row"><button type="button" class="btn-secondary" data-action="tab" data-arg="operations">Voir toutes les opérations →</button></li>`;
 }
 
 function renderDashboard() {
@@ -1961,9 +2054,9 @@ function renderOperations() {
       const checkIcon = op.pointed ? '✅' : '⬜';
       const isProgrammee = op.opType === 'Programmee';
       const metaSuffix = isProgrammee ? ' · programmée' : '';
-      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer;${pointed}" onclick="editOp('${op.id}','${op.date}')">
+      return `<li style="flex-direction:column;align-items:stretch;gap:6px;padding:12px 16px;cursor:pointer;${pointed}" data-action="edit" data-id="${esc(op.id)}" data-date="${esc(op.date)}">
         <div style="display:flex;align-items:center;gap:12px">
-          ${isProgrammee ? '<span class="op-icon">🔁</span>' : `<span class="op-check" role="checkbox" aria-checked="${op.pointed ? 'true' : 'false'}" aria-label="Pointer l'opération" onclick="event.stopPropagation();togglePointed('${op.id}')">${checkIcon}</span>`}
+          ${isProgrammee ? '<span class="op-icon">🔁</span>' : `<span class="op-check" role="checkbox" aria-checked="${op.pointed ? 'true' : 'false'}" aria-label="Pointer l'opération" data-action="point" data-id="${esc(op.id)}">${checkIcon}</span>`}
           <div class="op-info">
             <div class="op-label">${esc(op.label)}</div>
             <div class="op-meta">${formatDate(op.date)}${debitNote(op)} · ${esc(op.category || '')}${metaSuffix}${op.pointed ? ' · ✓ pointée' : ''}</div>
@@ -1999,7 +2092,7 @@ function renderOperations() {
   const remaining = ops.length - shown.length;
   list.innerHTML = shown.map(op => opHtml(op, !accFilter)).join('') +
     (remaining > 0
-      ? `<li class="more-row"><button type="button" id="btn-ops-more" class="btn-secondary" onclick="showMoreOps()">Afficher plus (${fmtInt(remaining)} restantes)</button></li>`
+      ? `<li class="more-row"><button type="button" id="btn-ops-more" class="btn-secondary" data-action="more">Afficher plus (${fmtInt(remaining)} restantes)</button></li>`
       : '');
   observeMoreOps();
 }
@@ -2050,8 +2143,8 @@ function opHtml(op, showAccount = false) {
   const meta = [formatDate(op.date) + debitNote(op), showAccount ? esc(op.account || '') : '', esc(op.category || '')].filter(Boolean).join(' · ');
   const pointed = op.pointed ? 'opacity:0.5;' : '';
   const checkIcon = op.pointed ? '✅' : '⬜';
-  return `<li style="cursor:pointer;${pointed}" onclick="editOp('${op.id}','${op.date}')">
-    <span class="op-check" role="checkbox" aria-checked="${op.pointed ? 'true' : 'false'}" aria-label="Pointer l'opération" onclick="event.stopPropagation();togglePointed('${op.id}')">${checkIcon}</span>
+  return `<li style="cursor:pointer;${pointed}" data-action="edit" data-id="${esc(op.id)}" data-date="${esc(op.date)}">
+    <span class="op-check" role="checkbox" aria-checked="${op.pointed ? 'true' : 'false'}" aria-label="Pointer l'opération" data-action="point" data-id="${esc(op.id)}">${checkIcon}</span>
     <div class="op-info">
       <div class="op-label">${esc(op.label)}</div>
       <div class="op-meta">${meta}</div>
@@ -2068,6 +2161,16 @@ function cleanComment(text) {
 }
 function commentHtml(op, tag = 'div') {
   return op.comment ? `<${tag} class="op-comment">📝 ${esc(op.comment)}</${tag}>` : '';
+}
+// Un texte commençant comme une formule serait calculé par le tableur : on le garde comme texte
+function safeCell(value) {
+  const text = String(value === undefined || value === null ? '' : value);
+  return /^[=+@\t\r]|^-(?![\d ])/.test(text) ? "'" + text : text;
+}
+// Champ d'un fichier CSV : entre guillemets s'il contient le séparateur, un guillemet ou un retour à la ligne
+function csvField(value) {
+  const text = safeCell(value);
+  return /[;"\r\n]/.test(text) ? csvText(text) : text;
 }
 function csvText(value) {
   return '"' + String(value || '').split('"').join('""') + '"';
@@ -2338,29 +2441,6 @@ document.getElementById('form-transfer').addEventListener('submit', async (e) =>
   if (accessToken) uploadToDrive().catch(err => toast('⚠️ ' + err.message));
 });
 
-// ── IMPORT ───────────────────────────────────────────────────────────────────
-document.getElementById('btn-import-bdu').addEventListener('click', async () => {
-  const statusEl = document.getElementById('import-status');
-  statusEl.classList.remove('hidden');
-  statusEl.textContent = '⏳ Chargement...';
-  try {
-    const res = await fetch('/comptes_data.json');
-    if (!res.ok) throw new Error('Fichier introuvable sur le serveur local');
-    const imported = await res.json();
-    if (!imported.operations || !Array.isArray(imported.operations)) throw new Error('Format invalide');
-    appData.operations = imported.operations;
-    appData.accounts   = imported.accounts || [];
-    appData.recurring  = imported.recurring || [];
-    saveLocal();
-    renderAll();
-    statusEl.textContent = `✅ ${imported.operations.length} opérations importées dans ${(imported.accounts||[]).length} comptes`;
-    if (accessToken) uploadToDrive().catch(() => {});
-    toast(`✅ Import terminé`);
-  } catch (e) {
-    statusEl.textContent = '❌ ' + e.message;
-  }
-});
-
 // ── NAVIGATION ───────────────────────────────────────────────────────────────
 // (le bouton ❓ de la barre n'a pas d'onglet : il ouvre l'aide ; sans ce filtre il vidait l'écran puis provoquait une erreur)
 document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
@@ -2434,8 +2514,8 @@ function renderAccountsConfig() {
       <span style="flex:1;min-width:110px;font-size:0.9rem;font-weight:600">${esc(name)}</span>
       <span style="font-size:0.75rem;color:var(--muted)">${ops} ops</span>
       ${kindSel}
-      <button onclick="renameAccount('${name.replace(/'/g, "\\'")}')" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer">✏️</button>
-      <button onclick="deleteAccount('${name.replace(/'/g, "\\'")}')" style="padding:4px 8px;border:1px solid var(--danger);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer;color:var(--danger)">🗑</button>
+      <button type="button" data-action="account-rename" data-name="${esc(name)}" aria-label="Renommer le compte ${esc(name)}" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer">✏️</button>
+      <button type="button" data-action="account-delete" data-name="${esc(name)}" aria-label="Supprimer le compte ${esc(name)}" style="padding:4px 8px;border:1px solid var(--danger);border-radius:8px;background:var(--bg);font-size:0.75rem;cursor:pointer;color:var(--danger)">🗑</button>
     </div>`;
   }).join('');
   container.querySelectorAll('.cfg-kind').forEach(sel => sel.addEventListener('change', () => {
@@ -4885,7 +4965,7 @@ function checkRestorable(data) {
   if (!isValidData(data) || !(data.operations.length || data.accounts.length)) {
     throw new Error('Ce fichier n’est pas une sauvegarde utilisable : rien n’a été modifié');
   }
-  return data;
+  return cleanData(data);
 }
 
 async function restoreBackup(key) {
@@ -5199,6 +5279,11 @@ document.getElementById('card-choices').addEventListener('click', e => {
 document.getElementById('card-visibility').addEventListener('input', e => setCardLook(savedCard().color, e.target.value));
 
 // ── AIDE ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.help-toggle').forEach(button => button.addEventListener('click', () => {
+  const body = button.nextElementSibling;
+  body.classList.toggle('hidden');
+  button.querySelector('.help-arrow').textContent = body.classList.contains('hidden') ? '▶' : '▼';
+}));
 document.getElementById('btn-help').addEventListener('click', () => {
   document.getElementById('modal-help').classList.remove('hidden');
 });
@@ -5224,7 +5309,7 @@ document.getElementById('btn-export-csv').addEventListener('click', () => {
   const rows = ops.map(op => {
     const debit = op.type === 'debit' ? op.amount : '';
     const credit = op.type === 'credit' ? op.amount : '';
-    return `${op.date};${op.label};${debit};${credit};${op.account};${op.category || ''};${op.opType || ''};${op.comment ? csvText(op.comment) : ''}`;
+    return [op.date, csvField(op.label), debit, credit, csvField(op.account), csvField(op.category), csvField(op.opType), op.comment ? csvText(safeCell(op.comment)) : ''].join(';');
   }).join('\n');
 
   const blob = new Blob([BOM + header + rows], { type: 'text/csv;charset=utf-8' });
@@ -5494,15 +5579,24 @@ async function writeBackupToDir() {
 }
 
 // ── RÉINITIALISATION ─────────────────────────────────────────────────────────
+// Tout ce qui contient des données ou des noms de comptes ; les réglages d'apparence restent
+const DATA_KEYS = ['finances_data', 'finances_backups', 'finances_pwd', 'finances_driverev', 'finances_basesync', 'finances_pending', 'finances_lastdrive',
+  'finances_bank_cards', 'finances_last_account', 'finances_cat_skip', 'finances_proj_accounts', 'lastImportUndo', 'lastImportIds', 'userEmail', 'gToken', 'gTokenExp'];
+function eraseDeviceData() {
+  for (const key of DATA_KEYS) localStorage.removeItem(key);
+  damagedData = null;
+  // à la suite des copies en cours d'écriture, pour qu'aucune ne réapparaisse
+  backupWork = backupWork.then(() => deviceDbRun('readwrite', store => { store.delete('damaged'); return store.delete('backups'); }))
+    .catch(e => console.warn('Copies non effacées :', (e && e.message) || e));
+}
 document.getElementById('btn-reset').addEventListener('click', () => {
-  if (!confirm('Effacer toutes les données locales ? Cette action est irréversible.')) return;
-  localStorage.removeItem('finances_data');
-  for (const k of ['finances_driverev', 'finances_basesync', 'finances_pending']) localStorage.removeItem(k);
-  localStorage.removeItem('gToken'); localStorage.removeItem('gTokenExp');
+  if (!confirm('Effacer toutes les données de cet appareil, y compris ses copies de secours ?\n\nGoogle Drive et les fichiers déjà téléchargés ne sont pas touchés. Cette action est irréversible.')) return;
+  eraseDeviceData();
   appData = structuredClone(defaultData);
   accessToken = null;
   driveFileId = null;
   updateConnBadge();
+  updatePwdStatus();
   showScreen('screen-login');
   toast('✅ Données effacées');
 });
@@ -6734,9 +6828,9 @@ function renderScheduled() {
         <span class="op-amount ${op.type}">${sign}${fmt(op.amount)}</span>
       </div>
       <div class="sched-actions">
-        <button type="button" class="act act-ok" onclick="passerScheduled('${op.id}')"${canPass ? '' : ' disabled'}>✅ Passer</button>
-        <button type="button" class="act" onclick="editScheduled('${op.id}')">✏️ Modifier</button>
-        <button type="button" class="act act-danger" onclick="deleteScheduled('${op.id}')">🗑 Supprimer</button>
+        <button type="button" class="act act-ok" data-action="pass" data-id="${esc(op.id)}"${canPass ? '' : ' disabled'}>✅ Passer</button>
+        <button type="button" class="act" data-action="sched-edit" data-id="${esc(op.id)}">✏️ Modifier</button>
+        <button type="button" class="act act-danger" data-action="sched-delete" data-id="${esc(op.id)}">🗑 Supprimer</button>
       </div>
     </li>`;
   };
@@ -6876,7 +6970,7 @@ window.deleteScheduled = function(id) {
     toastAction(message, 'Annuler', () => { undo(); saveLocal(); renderAll(); toast('↩️ Annulé'); }, 9000);
   };
   const removeAll = () => {
-    const copy = { ...op };
+    const copy = { ...(appData.operations.find(o => o.id === id) || op) };
     dropOps(o => o.id !== id);
     done(`🗑 « ${copy.label} » supprimée`, () => appData.operations.push({ ...copy, id: uid() }));
   };
@@ -6899,9 +6993,11 @@ window.deleteScheduled = function(id) {
     okLabel: 'Confirmer', danger: true,
     onOk: (v) => {
       if (v.target !== 'stop') { removeAll(); return; }
-      const before = op.endDate;
-      endBeforeMonth(op, stopFrom);
-      done(`⏹ « ${op.label} » arrêtée : le passé reste compté`, () => {
+      const live = appData.operations.find(o => o.id === id);        // relue ici : une synchronisation a pu passer
+      if (!live) { toast('⚠️ Cette échéance n’existe plus'); renderAll(); return; }
+      const before = live.endDate;
+      endBeforeMonth(live, stopFrom);
+      done(`⏹ « ${live.label} » arrêtée : le passé reste compté`, () => {
         const o = appData.operations.find(x => x.id === id);
         if (o) { if (before !== undefined) o.endDate = before; else delete o.endDate; }
       });
@@ -7062,6 +7158,12 @@ document.getElementById('btn-paste-parse').addEventListener('click', () => {
 
   // Fusionner tous les collages
   const lines = pasteBatches.flat();
+  if (!lines.length) {
+    pasteBatches = [];
+    updateBatchesDisplay();
+    toast('⚠️ Aucune ligne à analyser : vérifiez le nombre de lignes à ignorer', 5000);
+    return;
+  }
   // format du site bancaire (date, libellé, prélèvement, montant, XPF, Débit) : pas de colonnes à régler
   const bank = parseBankText(lines.join('\n'));
   if (bank.length) { openBankReview(bank); return; }
@@ -7141,10 +7243,10 @@ function renderPasteStep2() {
     const selOpts = roles.map(r => `<option value="${r}" ${pasteData.colRoles[i] === r ? 'selected' : ''}>${roleLabels[r]}</option>`).join('');
     return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:0.78rem;display:flex;flex-direction:column;gap:4px;min-width:100px">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <b style="font-size:0.75rem">${h}</b>
-        <span onclick="removePasteCol(${i})" style="cursor:pointer;color:var(--danger);font-size:0.9rem">✕</span>
+        <b style="font-size:0.75rem">${esc(h)}</b>
+        <span data-paste-remove="${i}" role="button" tabindex="0" aria-label="Retirer la colonne" style="cursor:pointer;color:var(--danger);font-size:0.9rem">✕</span>
       </div>
-      <select onchange="setPasteRole(${i},this.value)" style="padding:4px;font-size:0.75rem">${selOpts}</select>
+      <select data-paste-role="${i}" aria-label="Rôle de la colonne" style="padding:4px;font-size:0.75rem">${selOpts}</select>
     </div>`;
   }).join('');
   document.getElementById('paste-columns').innerHTML = colsHtml;
@@ -7162,9 +7264,9 @@ function renderPasteStep2() {
   // Aperçu tableau (5 premières lignes)
   const visibleCols = pasteData.headers.map((_, i) => i).filter(i => !pasteData.removedCols.includes(i));
   const previewRows = pasteData.rows.slice(0, 15);
-  const thHtml = `<th style="padding:4px 6px;font-size:0.7rem;border-bottom:1px solid var(--border);color:var(--muted)">#</th>` + visibleCols.map(i => `<th style="padding:4px 6px;font-size:0.7rem;white-space:nowrap;border-bottom:1px solid var(--border);color:var(--muted)">${pasteData.headers[i]}</th>`).join('');
+  const thHtml = `<th style="padding:4px 6px;font-size:0.7rem;border-bottom:1px solid var(--border);color:var(--muted)">#</th>` + visibleCols.map(i => `<th style="padding:4px 6px;font-size:0.7rem;white-space:nowrap;border-bottom:1px solid var(--border);color:var(--muted)">${esc(pasteData.headers[i])}</th>`).join('');
   const trHtml = previewRows.map((row, idx) =>
-    `<tr><td style="padding:3px 6px;font-size:0.7rem;color:var(--muted);border-bottom:1px solid var(--border)">${idx+1}</td>${visibleCols.map(i => `<td style="padding:3px 6px;font-size:0.75rem;white-space:nowrap;border-bottom:1px solid var(--border)">${row[i] || '<span style="color:var(--danger)">vide</span>'}</td>`).join('')}</tr>`
+    `<tr><td style="padding:3px 6px;font-size:0.7rem;color:var(--muted);border-bottom:1px solid var(--border)">${idx+1}</td>${visibleCols.map(i => `<td style="padding:3px 6px;font-size:0.75rem;white-space:nowrap;border-bottom:1px solid var(--border)">${row[i] ? esc(row[i]) : '<span style="color:var(--danger)">vide</span>'}</td>`).join('')}</tr>`
   ).join('');
 
   document.getElementById('paste-preview').innerHTML = `
@@ -7180,6 +7282,19 @@ window.removePasteCol = function(idx) {
   pasteData.removedCols.push(idx);
   renderPasteStep2();
 };
+
+document.getElementById('paste-columns').addEventListener('click', (e) => {
+  const cross = e.target.closest('[data-paste-remove]');
+  if (cross) removePasteCol(+cross.dataset.pasteRemove);
+});
+document.getElementById('paste-columns').addEventListener('change', (e) => {
+  if (e.target.dataset.pasteRole !== undefined) setPasteRole(+e.target.dataset.pasteRole, e.target.value);
+});
+document.getElementById('paste-review').addEventListener('change', (e) => {
+  const { pasteKeep, pasteCategory } = e.target.dataset;
+  if (pasteKeep !== undefined) parsedOps[+pasteKeep].skip = !e.target.checked;
+  if (pasteCategory !== undefined) parsedOps[+pasteCategory].category = e.target.value;
+});
 
 window.setPasteRole = function(idx, role) {
   // Un seul rôle par colonne (sauf ignorer)
@@ -7320,11 +7435,11 @@ function renderPasteStep3() {
     const dupeStyle = op.duplicate ? 'background:rgba(239,108,0,0.1);border-left:3px solid var(--warning);' : '';
     const checked = op.skip ? '' : 'checked';
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--border);flex-wrap:wrap;${dupeStyle}">
-      <input type="checkbox" ${checked} onchange="parsedOps[${i}].skip=!this.checked" style="width:18px;height:18px;accent-color:var(--primary)"/>
+      <input type="checkbox" ${checked} data-paste-keep="${i}" aria-label="Importer cette ligne" style="width:18px;height:18px;accent-color:var(--primary)"/>
       <span style="font-size:0.78rem;color:var(--muted);min-width:65px">${formatDate(op.date)}</span>
       <span style="flex:1;font-size:0.82rem;font-weight:600;min-width:80px">${esc(op.label)}${op.duplicate ? ' <span style="color:var(--warning);font-size:0.72rem">⚠️ doublon</span>' : ''}</span>
       <span style="font-weight:700;color:${col};font-size:0.85rem;min-width:70px;text-align:right">${sign}${fmt(op.amount)}</span>
-      <select onchange="parsedOps[${i}].category=this.value" style="padding:4px 6px;font-size:0.75rem;min-width:90px">${catOptions.replace(`value="${esc(op.category)}"`, m => m + ' selected')}</select>
+      <select data-paste-category="${i}" aria-label="Catégorie" style="padding:4px 6px;font-size:0.75rem;min-width:90px">${catOptions.replace(`value="${esc(op.category)}"`, m => m + ' selected')}</select>
     </div>`;
   }).join('');
 

@@ -13,7 +13,7 @@ function extract(name) {
   return src.slice(i + 1, src.indexOf('\n}\n', i) + 3);
 }
 const NAMES = ['setPref', 'writeData', 'saveLocal', 'dropOps', 'stableText', 'recordText', 'isEmptyValue', 'settingKeys', 'stampChanges', 'dataSignature', 'isValidData',
-  'mergeAppData', 'getPwdHash', 'oneAtATime', 'driveRequest', 'driveError', 'findOrCreateFile', 'driveRevision', 'downloadFromDrive', 'safeBackup',
+  'mergeAppData', 'cleanData', 'getPwdHash', 'oneAtATime', 'driveRequest', 'driveError', 'findOrCreateFile', 'driveRevision', 'downloadFromDrive', 'safeBackup',
   'appOpen', 'applyRemotePassword', 'receiveFromDrive', 'sendToDrive', 'driveExchange', 'uploadToDrive', 'replaceData', 'checkRestorable', 'forgetAccount'];
 const CODE = NAMES.map(extract).join('\n');
 
