@@ -138,7 +138,7 @@ document.getElementById('btn-pwd-set').addEventListener('click', async () => {
   if (pwd.length < 4) { toast('⚠️ Minimum 4 caractères'); return; }
   const hash = await hashPassword(pwd);
   appData.pwdHash = hash;
-  localStorage.setItem('finances_pwd', hash);
+  setPref('finances_pwd', hash);
   saveLocal();
   document.getElementById('cfg-pwd-new').value = '';
   document.getElementById('cfg-pwd-confirm').value = '';
@@ -203,6 +203,34 @@ function updatePwdStatus() {
 }
 
 // ── STOCKAGE LOCAL ───────────────────────────────────────────────────────────
+// Écrit un réglage sans jamais interrompre l'action en cours (mémoire pleine, stockage refusé)
+function setPref(key, value) {
+  try { localStorage.setItem(key, value); return true; } catch { return false; }
+}
+let storageFull = false;      // la dernière écriture des données a échoué
+// Enregistre les données sur l'appareil. Si la place manque, on le dit clairement : jamais d'échec silencieux.
+function writeData() {
+  const text = JSON.stringify(appData);
+  const write = () => {
+    try { localStorage.setItem('finances_data', text); return true; }
+    catch (e) { console.warn('Enregistrement impossible :', e.message); return false; }
+  };
+  let saved = write();
+  // les données passent avant les copies de secours restées dans le même petit stockage
+  if (!saved && localStorage.getItem('finances_backups')) {
+    localStorage.removeItem('finances_backups');
+    saved = write();
+  }
+  const first = !saved && !storageFull;
+  storageFull = !saved;
+  if (saved) return true;
+  // l'appareil garde une version ancienne : la prochaine synchronisation devra relire Drive avant d'envoyer
+  localStorage.removeItem('finances_driverev');
+  if (first) alert('⚠️ La mémoire de l’appareil est pleine : la dernière modification n’est PAS enregistrée sur cet appareil.\n\nNe fermez pas l’application : connectez-vous à Google Drive, ou utilisez Paramètres › Sauvegardes › Télécharger.');
+  else toast('⚠️ Mémoire pleine : modification non enregistrée sur cet appareil', 6000);
+  return false;
+}
+
 // touch=true (défaut) → horodate la version des données (modification utilisateur)
 // touch=false → conserve l'horodatage existant (ex: après téléchargement depuis Drive)
 function saveLocal(touch = true) {
@@ -214,12 +242,13 @@ function saveLocal(touch = true) {
     appData.lastSync = now.toISOString();
     appData.lastSyncLocal = now.toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
   }
-  localStorage.setItem('finances_data', JSON.stringify(appData));
+  const saved = writeData();
   // Modification locale pas encore confirmée par Drive : on s'en souvient jusqu'à l'envoi réussi
-  if (touch) { localStorage.setItem('finances_pending', '1'); updateConnBadge(); }
+  if (touch) { setPref('finances_pending', '1'); updateConnBadge(); }
   // Auto-upload vers Drive si connecté (silencieux, pas de popup) : Drive est toujours relu avant l'envoi
   if (touch && accessToken) uploadToDrive().catch(() => {});
   scheduleDirBackup();
+  return saved;
 }
 
 // Supprime des opérations ET garde une trace (id → date) pour que la fusion avec Drive
@@ -367,8 +396,8 @@ let unlocked = false;
 function onTokenReceived(resp) {
   if (!resp || resp.error || !resp.access_token) { onConnectionFailed(resp && resp.error); return; }
   accessToken = resp.access_token;
-  localStorage.setItem('gToken', accessToken);
-  localStorage.setItem('gTokenExp', String(Date.now() + ((resp.expires_in || 3600) - 60) * 1000));
+  setPref('gToken', accessToken);
+  setPref('gTokenExp', String(Date.now() + ((resp.expires_in || 3600) - 60) * 1000));
   closeConnectModal();
   updateConnBadge();
   toast('☁️ Connecté à Google Drive');
@@ -474,6 +503,7 @@ document.getElementById('btn-skip-login').addEventListener('click', () => {
 });
 window.addEventListener('load', () => {
   const hasData = loadLocal();
+  if (localStorage.getItem('finances_backups')) storeBackups([]);   // libère la place prise par les anciennes copies
   const locked = checkLockScreen();
   if (!locked) {
     if (hasData) {
@@ -563,7 +593,7 @@ function appOpen() {
 }
 // Le mot de passe suit les données : ajouté ou retiré sur un autre appareil, il l'est aussi ici
 function applyRemotePassword() {
-  if (appData.pwdHash) localStorage.setItem('finances_pwd', appData.pwdHash);
+  if (appData.pwdHash) setPref('finances_pwd', appData.pwdHash);
   else if (appData.keyTimes && appData.keyTimes.pwdHash) localStorage.removeItem('finances_pwd');
 }
 // Réunit ce qui vient de Drive avec les données de l'appareil
@@ -583,8 +613,8 @@ function receiveFromDrive(remote) {
   appData.lastSyncLocal = lastSyncLocal;
   saveLocal(false);
   applyRemotePassword();
-  localStorage.setItem('finances_basesync', remote.lastSync || '');
-  if (toSend) localStorage.setItem('finances_pending', '1');
+  setPref('finances_basesync', remote.lastSync || '');
+  if (toSend) setPref('finances_pending', '1');
   else localStorage.removeItem('finances_pending');
   return gained;
 }
@@ -604,10 +634,10 @@ async function sendToDrive() {
   if (!res.ok) throw new Error('Envoi refusé par Drive (code ' + res.status + ')');
   const info = await res.json().catch(() => ({}));
   const rev = info.md5Checksum || info.headRevisionId;
-  if (rev) localStorage.setItem('finances_driverev', driveFileId + ':' + rev);
-  else localStorage.removeItem('finances_driverev');        // inconnue : on relira Drive la prochaine fois
-  localStorage.setItem('finances_lastdrive', new Date().toISOString());
-  localStorage.setItem('finances_basesync', sent || '');
+  if (rev && !storageFull) setPref('finances_driverev', driveFileId + ':' + rev);
+  else localStorage.removeItem('finances_driverev');        // inconnue, ou appareil en retard : on relira Drive la prochaine fois
+  setPref('finances_lastdrive', new Date().toISOString());
+  setPref('finances_basesync', sent || '');
   // Si l'utilisateur a encore modifié pendant l'envoi, il reste des changements à envoyer
   if (appData.lastSync === sent) localStorage.removeItem('finances_pending');
 }
@@ -623,17 +653,18 @@ async function driveExchange() {
       const remote = await downloadFromDrive();
       if (remote) {
         const gained = receiveFromDrive(remote);
-        if (rev) localStorage.setItem('finances_driverev', rev);
+        if (rev && !storageFull) setPref('finances_driverev', rev);
         if (gained) {
           driveNews = '🔀 Données mises à jour avec celles de Drive';
           if (appOpen()) { renderAll(); toast(driveNews, 3500); }
         }
       } else {
         remoteEmpty = true;
-        if (!nothingHere) localStorage.setItem('finances_pending', '1');
+        if (!nothingHere) setPref('finances_pending', '1');
       }
     }
-    if (localStorage.getItem('finances_pending') === '1' && !(remoteEmpty && nothingHere)) {
+    // mémoire pleine : la version la plus récente n'existe qu'ici, Drive doit la recevoir
+    if ((localStorage.getItem('finances_pending') === '1' || storageFull) && !(remoteEmpty && nothingHere)) {
       await sendToDrive();
       if (!driveNews) driveNews = '✅ Modifications envoyées vers Drive';
     }
@@ -705,7 +736,7 @@ function updateSyncStatus() {
     // l'avertissement n'a de sens que si cet appareil utilise Drive (sinon il resterait affiché à vie après la 1re modification)
     const usesDrive = !!(accessToken || localStorage.getItem('finances_lastdrive') || localStorage.getItem('gToken'));
     const pend = (usesDrive && localStorage.getItem('finances_pending') === '1') ? ' · ⚠️ modifications non envoyées à Drive' : '';
-    el.textContent = '📊 Données du ' + str + online + pend;
+    el.textContent = '📊 Données du ' + str + online + pend + (storageFull ? ' · ⚠️ mémoire pleine' : '');
     if (ls) ls.textContent = str;
   }
 }
@@ -2174,7 +2205,7 @@ document.getElementById('form-expense').addEventListener('submit', async (e) => 
     if (answer !== true) return;
   }
   appData.operations.push(op);
-  localStorage.setItem('finances_last_account', accountName);
+  setPref('finances_last_account', accountName);
   saveLocal();
   renderAll();
   const fb = document.getElementById('save-feedback');
@@ -2371,8 +2402,8 @@ document.getElementById('btn-force-download').addEventListener('click', async ()
       appData = remote;
       saveLocal(false);
       applyRemotePassword();
-      if (rev) localStorage.setItem('finances_driverev', rev);
-      localStorage.setItem('finances_basesync', remote.lastSync || '');
+      if (rev && !storageFull) setPref('finances_driverev', rev);
+      setPref('finances_basesync', remote.lastSync || '');
       localStorage.removeItem('finances_pending');
       renderAll();
       document.getElementById('sync-detail').textContent = '✅ Données récupérées de Drive — ' + (appData.operations || []).length + ' opérations';
@@ -4762,32 +4793,72 @@ byId('s-print').addEventListener('click', () => {
 });
 
 // ── SAUVEGARDES LOCALES ──────────────────────────────────────────────────────
+// Les copies de secours sont gardées dans la base de l'appareil (IndexedDB), bien plus grande que le petit stockage
+// qui contient les données : elles ne peuvent plus le remplir.
 const MAX_BACKUPS = 5;
+let backupWork = Promise.resolve();      // les écritures se font l'une après l'autre
 
+// Copies restées à l'ancien emplacement (versions précédentes de l'application)
+function oldPlaceBackups() {
+  try { return JSON.parse(localStorage.getItem('finances_backups') || '[]'); } catch { return []; }
+}
+// Les 5 états différents les plus récents, du plus ancien au plus récent (ouvrir l'application plusieurs fois sans rien
+// changer ne chasse donc pas les copies plus anciennes)
+function keepRecentBackups(list) {
+  const sorted = list.filter(b => b && b.data).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const latest = new Map(sorted.map(b => [b.data, b]));          // contenu identique : la date la plus récente gagne
+  return sorted.filter(b => latest.get(b.data) === b).slice(-MAX_BACKUPS);
+}
+// désigne une copie sans ambiguïté (date et empreinte du contenu)
+function backupKey(b) {
+  let sum = 0;
+  for (let i = 0; i < b.data.length; i++) sum = (sum * 31 + b.data.charCodeAt(i)) | 0;
+  return `${b.date}#${b.data.length}#${sum}`;
+}
+// Ajoute des copies et reprend au passage celles de l'ancien emplacement, qui est alors libéré
+function storeBackups(added) {
+  backupWork = backupWork.then(async () => {
+    const old = oldPlaceBackups();
+    await deviceDbRun('readwrite', store => {
+      const read = store.get('backups');
+      read.onsuccess = () => store.put(keepRecentBackups([...(read.result || []), ...old, ...added]), 'backups');
+      return read;
+    });
+    localStorage.removeItem('finances_backups');
+  }).catch(e => {
+    console.warn('Copie de secours impossible :', (e && e.message) || e);
+    // base indisponible : les 2 dernières copies restent à l'ancien emplacement, s'il y a la place
+    if (added.length) setPref('finances_backups', JSON.stringify(keepRecentBackups([...oldPlaceBackups(), ...added]).slice(-2)));
+  });
+  return backupWork;
+}
+async function readBackups() {
+  await backupWork;
+  const stored = await deviceDbRun('readonly', s => s.get('backups')).catch(() => null);
+  return keepRecentBackups([...(stored || []), ...oldPlaceBackups()]);
+}
 function autoBackup() {
-  if (!appData.operations.length) return;
-  const backups = JSON.parse(localStorage.getItem('finances_backups') || '[]');
+  if (!appData.operations.length) return backupWork;
   const now = new Date();
   const stamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  backups.push({ date: stamp, ops: appData.operations.length, data: JSON.stringify(appData) });
-  while (backups.length > MAX_BACKUPS) backups.shift();
-  localStorage.setItem('finances_backups', JSON.stringify(backups));
+  // les données sont copiées tout de suite (avant tout remplacement), l'écriture suit
+  return storeBackups([{ date: stamp, ops: appData.operations.length, data: JSON.stringify(appData) }]);
 }
 
-function renderBackupList() {
-  const backups = JSON.parse(localStorage.getItem('finances_backups') || '[]');
+async function renderBackupList() {
+  const backups = await readBackups();
   const el = document.getElementById('backup-list');
   if (!backups.length) {
     el.textContent = 'Aucune sauvegarde';
     return;
   }
-  el.innerHTML = backups.map((b, i) => {
+  el.innerHTML = backups.map(b => {
     // le nombre d'opérations est mémorisé à la création (inutile de ré-analyser des sauvegardes de ~450 Ko à chaque affichage)
     let ops = b.ops;
     if (ops === undefined) { try { const d = JSON.parse(b.data); ops = d.operations ? d.operations.length : 0; } catch { ops = 0; } }
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0">
       <span>📁 ${esc(b.date)}</span>
-      <span style="display:flex;align-items:center;gap:8px">${ops} ops <button type="button" class="act" style="min-height:38px;padding:0 12px" onclick="restoreBackup(${i})">Restaurer</button></span>
+      <span style="display:flex;align-items:center;gap:8px">${Number(ops) || 0} ops <button type="button" class="act" style="min-height:38px;padding:0 12px" data-backup="${esc(backupKey(b))}">Restaurer</button></span>
     </div>`;
   }).join('');
 }
@@ -4817,18 +4888,23 @@ function checkRestorable(data) {
   return data;
 }
 
-window.restoreBackup = function(index) {
-  const backups = JSON.parse(localStorage.getItem('finances_backups') || '[]');
-  if (!backups[index]) return;
-  if (!confirm(`Restaurer la sauvegarde du ${backups[index].date} ? Les données actuelles seront remplacées.`)) return;
+async function restoreBackup(key) {
+  // retrouvée par son contenu, pas par son rang : une nouvelle copie a pu s'ajouter depuis l'affichage de la liste
+  const backup = (await readBackups()).find(b => backupKey(b) === key);
+  if (!backup) { toast('⚠️ Cette copie n’existe plus'); renderBackupList(); return; }
+  if (!confirm(`Restaurer la sauvegarde du ${backup.date} ? Les données actuelles seront remplacées.`)) return;
   try {
-    replaceData(checkRestorable(JSON.parse(backups[index].data)));
+    replaceData(checkRestorable(JSON.parse(backup.data)));
     renderAll();
-    toast(`✅ Sauvegarde du ${backups[index].date} restaurée`);
+    toast(`✅ Sauvegarde du ${backup.date} restaurée`);
   } catch (e) {
     toast('❌ ' + e.message, 5000);
   }
-};
+}
+document.getElementById('backup-list').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-backup]');
+  if (button) restoreBackup(button.dataset.backup);
+});
 
 document.getElementById('btn-backup-download').addEventListener('click', async () => {
   const now = new Date();
@@ -4938,7 +5014,7 @@ function applyDarkMode(dark) {
 
 document.getElementById('cfg-dark-mode').addEventListener('change', (e) => {
   const dark = e.target.checked;
-  localStorage.setItem('darkMode', dark);
+  setPref('darkMode', dark);
   applyDarkMode(dark);
 });
 
@@ -4980,7 +5056,7 @@ function applyBackground(choice) {
   document.getElementById('bg-visibility-wrap').classList.toggle('hidden', choice !== 'photo');
 }
 function chooseBackground(choice) {
-  localStorage.setItem('finances_background', choice);
+  setPref('finances_background', choice);
   applyBackground(choice);
 }
 function setBackgroundPhoto(blob) {
@@ -5013,7 +5089,7 @@ document.getElementById('bg-choices').addEventListener('click', e => {
   if (b) chooseBackground(b.dataset.bgChoice);
 });
 document.getElementById('bg-visibility').addEventListener('input', e => {
-  localStorage.setItem('finances_bg_visibility', photoVisibility(e.target.value));
+  setPref('finances_bg_visibility', photoVisibility(e.target.value));
   applyPhotoVisibility(e.target.value);
 });
 document.getElementById('btn-bg-photo').addEventListener('click', () => document.getElementById('bg-photo-input').click());
@@ -5099,8 +5175,8 @@ function applyCardLook({ color, visibility }) {
 }
 function setCardLook(color, visibility) {
   const look = cardSettings(color, visibility);
-  localStorage.setItem('finances_card_color', look.color);
-  localStorage.setItem('finances_card_visibility', look.visibility);
+  setPref('finances_card_color', look.color);
+  setPref('finances_card_visibility', look.visibility);
   applyCardLook(look);
 }
 // Choisir une couleur rend le cadre visible ; « Invisible » met la visibilité à 0 sans oublier la couleur
@@ -7289,7 +7365,7 @@ document.getElementById('btn-paste-import').addEventListener('click', () => {
 
   if (imported > 0) {
     const importedIds = appData.operations.slice(-imported).map(op => op.id);
-    localStorage.setItem('lastImportIds', JSON.stringify(importedIds));
+    setPref('lastImportIds', JSON.stringify(importedIds));
     saveLocal();
     renderAll();
     document.getElementById('modal-paste-import').classList.add('hidden');
@@ -7557,7 +7633,7 @@ document.getElementById('bank-import').addEventListener('click', () => {
   const useRule = rule && document.getElementById('bank-rule').checked ? rule : null;
   const undo = applyBankImport(kept, account, useRule);
   if (ops[0].card) try { localStorage.setItem('finances_bank_cards', JSON.stringify({ ...bankCards(), [ops[0].card]: account })); } catch { /* ignoré */ }
-  localStorage.setItem('lastImportUndo', JSON.stringify(undo));
+  setPref('lastImportUndo', JSON.stringify(undo));
   localStorage.removeItem('lastImportIds');
   saveLocal();
   renderAll();

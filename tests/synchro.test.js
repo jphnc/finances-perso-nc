@@ -12,7 +12,7 @@ function extract(name) {
   if (i < 0) throw new Error('fonction introuvable dans app.js : ' + name);
   return src.slice(i + 1, src.indexOf('\n}\n', i) + 3);
 }
-const NAMES = ['saveLocal', 'dropOps', 'stableText', 'recordText', 'isEmptyValue', 'settingKeys', 'stampChanges', 'dataSignature', 'isValidData',
+const NAMES = ['setPref', 'writeData', 'saveLocal', 'dropOps', 'stableText', 'recordText', 'isEmptyValue', 'settingKeys', 'stampChanges', 'dataSignature', 'isValidData',
   'mergeAppData', 'getPwdHash', 'oneAtATime', 'driveRequest', 'driveError', 'findOrCreateFile', 'driveRevision', 'downloadFromDrive', 'safeBackup',
   'appOpen', 'applyRemotePassword', 'receiveFromDrive', 'sendToDrive', 'driveExchange', 'uploadToDrive', 'replaceData', 'checkRestorable', 'forgetAccount'];
 const CODE = NAMES.map(extract).join('\n');
@@ -45,20 +45,24 @@ function fakeDrive(content) {
 let clock = Date.parse('2026-11-28T10:00:00Z');
 function device(drive, data, store = {}) {
   const storage = new Map(Object.entries({ ...(data ? { finances_data: JSON.stringify(data) } : {}), ...store }));
-  const localStorage = { getItem: k => (storage.has(k) ? storage.get(k) : null), setItem: (k, v) => storage.set(k, String(v)), removeItem: k => storage.delete(k) };
+  const room = { chars: Infinity };                // place disponible, pour simuler une mémoire pleine
+  const localStorage = { getItem: k => (storage.has(k) ? storage.get(k) : null), removeItem: k => storage.delete(k),
+    setItem: (k, v) => { if (String(v).length > room.chars) throw new Error('QuotaExceededError'); storage.set(k, String(v)); } };
   const Real = Date;
   class Clock extends Real {                      // chaque action a lieu une seconde après la précédente
     constructor(...a) { if (a.length) super(...a); else super(clock += 1000); }
     static now() { return clock; }
   }
-  const body = `let appData = init, accessToken = null, driveFileId = null, syncRunning = 0, unlocked = true, driveNews = '', exchangeQueue = null, backups = 0, renders = 0;
+  const body = `let appData = init, accessToken = null, driveFileId = null, syncRunning = 0, unlocked = true, driveNews = '', exchangeQueue = null, backups = 0, renders = 0, storageFull = false;
+    const alerts = [], alert = m => alerts.push(m);
     const FILE_NAME = 'comptes_data.json';
     const updateConnBadge = () => {}, updateSyncStatus = () => {}, scheduleDirBackup = () => {}, renderAll = () => { renders++; }, toast = () => {}, autoBackup = () => { backups++; };
     ${CODE}
-    return { ${NAMES.join(', ')}, data: () => appData, connect: () => { accessToken = 'jeton'; }, backups: () => backups, renders: () => renders };`;
+    return { ${NAMES.join(', ')}, data: () => appData, connect: () => { accessToken = 'jeton'; }, backups: () => backups, renders: () => renders, alerts, full: () => storageFull };`;
   const initial = data ? structuredClone(data) : { version: 2, lastSync: null, accounts: [], operations: [], recurring: [] };
   const A = new Function('init', 'localStorage', 'fetch', 'Date', 'console', body)(initial, localStorage, drive.fetch, Clock, { warn() {} });
   A.storage = storage;
+  A.room = room;
   A.labels = () => A.data().operations.map(o => o.label).sort();
   // saisie comme dans l'application : on modifie les données puis on enregistre
   A.edit = (change) => { change(A.data()); A.saveLocal(); };
@@ -153,6 +157,22 @@ test('fichier Drive non reconnu : refusé, rien n’est modifié', async () => {
     assert.deepEqual(A.labels(), ['a', 'b']);
     assert.equal(drive.files[0].content, content);
   }
+});
+
+test('mémoire pleine : la saisie part quand même sur Drive et revient après redémarrage', async () => {
+  const { drive, phone } = await pair();
+  phone.room.chars = 100;
+  phone.add('pleine'); await settle();
+  assert.equal(phone.full(), true);
+  assert.equal(phone.alerts.length, 1);
+  assert.ok(drive.labels().includes('pleine'));
+  assert.ok(!JSON.parse(phone.storage.get('finances_data')).operations.some(o => o.id === 'pleine'));
+  assert.equal(phone.storage.get('finances_driverev'), undefined);
+  // redémarrage : l’appareil repart de sa copie ancienne et récupère la saisie sur Drive sans rien écraser
+  const after = device(drive, JSON.parse(phone.storage.get('finances_data')), Object.fromEntries([...phone.storage].filter(([k]) => k !== 'finances_data')));
+  after.connect(); await after.uploadToDrive();
+  assert.deepEqual(after.labels(), ['a', 'b', 'pleine']);
+  assert.deepEqual(drive.labels(), ['a', 'b', 'pleine']);
 });
 
 test('envoi refusé : la modification reste en attente puis part au prochain essai', async () => {
